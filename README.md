@@ -105,7 +105,7 @@ npm run dev   # http://localhost:3000
 
 - [x] **M1 — Core Platform & BYOK** · dashboard UI, Web Crypto vault, model router
 - [x] **M2 — Streaming Pipeline & Screen Capture** · getDisplayMedia, canvas sampling, frame eviction, WS
-- [ ] **M3 — Voice & Interruption** · Web Audio, Silero VAD, STT/TTS streaming, interrupt handler
+- [x] **M3 — Voice & Interruption** · Web Audio, client VAD (Silero-ready), Whisper STT + OpenAI TTS, barge-in interrupt
 - [ ] **M4 — On-Screen Automation** · JSON action schema, coordinate mapper, Playwright runner
 - [ ] **M5 — Polish, Rate-limiting & Deploy** · cost overlay, confirmation modals, Docker, Vercel + Fly.io
 

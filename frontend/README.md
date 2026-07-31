@@ -33,6 +33,15 @@ The backend must be running (default `http://localhost:8000`) for the Model Test
 - **Screen Vision panel** — live preview, eviction stats, and ask-about-your-screen streaming
   with an interrupt button (`src/components/ScreenCapturePanel.tsx`).
 
+## What's implemented (Milestone 3)
+
+- **Voice session** — mic capture + energy-based VAD segmenting utterances (`src/lib/voice-session.ts`).
+  The VAD is behind a VAD-agnostic interface so a Silero-WASM detector can drop in later.
+- **STT/TTS client** — Whisper transcription + OpenAI speech synthesis (`src/lib/voice-api.ts`).
+- **Voice panel** — speak → transcribe → LLM answer over WS → spoken reply, with a live mic
+  meter and **barge-in interruption** (talking cancels the in-flight answer and stops playback)
+  (`src/components/VoicePanel.tsx`). Voice uses your OpenAI key for STT + TTS.
+
 ## Structure
 
 ```

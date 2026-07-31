@@ -17,11 +17,11 @@ build on it without rework.
 - [x] Bi-directional WebSocket between Next.js and FastAPI
 - [x] Bonus: vision-over-WebSocket — ask questions about the live screen
 
-## Milestone 3 — Voice Integration & Interruption Management
-- [ ] Browser audio recording via Web Audio API
-- [ ] Silero VAD WebAssembly module in the client
-- [ ] Server-side STT/TTS streaming pipeline
-- [ ] Interrupt handler: client `cancel` frame purges audio buffers
+## Milestone 3 — Voice Integration & Interruption Management ✅
+- [x] Browser audio recording via Web Audio API
+- [x] Client-side VAD (energy/RMS; VAD-agnostic interface — Silero WASM can drop in)
+- [x] Server-side STT/TTS pipeline (Whisper + OpenAI speech, BYOK)
+- [x] Interrupt handler: speech onset cancels generation + purges TTS playback (barge-in)
 
 ## Milestone 4 — On-Screen Automation & Action Execution
 - [ ] JSON action payload prompting template
