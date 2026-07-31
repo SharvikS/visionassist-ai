@@ -1,6 +1,7 @@
 "use client";
 
 import Dashboard from "./Dashboard";
+import ErrorBoundary from "./ErrorBoundary";
 import VaultGate from "./VaultGate";
 import { useVault, VaultProvider } from "./vault-context";
 
@@ -19,8 +20,10 @@ function Gate() {
 
 export default function AppRoot() {
   return (
-    <VaultProvider>
-      <Gate />
-    </VaultProvider>
+    <ErrorBoundary>
+      <VaultProvider>
+        <Gate />
+      </VaultProvider>
+    </ErrorBoundary>
   );
 }

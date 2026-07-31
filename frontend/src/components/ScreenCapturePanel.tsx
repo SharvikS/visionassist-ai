@@ -77,6 +77,7 @@ export default function ScreenCapturePanel() {
         setError(detail);
         setGenerating(false);
       },
+      onReconnecting: () => setWsState("reconnecting…"),
       onClose: () => setWsState("idle"),
     });
     socketRef.current = socket;

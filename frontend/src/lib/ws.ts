@@ -1,9 +1,12 @@
 /**
- * SessionSocket — thin wrapper over the backend /ws/session control plane.
+ * SessionSocket — thin, resilient wrapper over the backend /ws/session control plane.
  *
  * Mirrors the message protocol in docs/ARCHITECTURE.md. The BYOK key is sent once in the
  * `init` message over the (TLS-secured in prod) socket and lives only in the server's
  * per-connection memory.
+ *
+ * On an unexpected drop it auto-reconnects with exponential backoff and re-fires `onOpen`,
+ * so callers that initialize in `onOpen` transparently recover their session.
  */
 
 import { API_BASE } from "./api";
@@ -22,7 +25,15 @@ export interface SessionHandlers {
   onToken?: (text: string) => void;
   onDone?: () => void;
   onError?: (detail: string) => void;
+  /** Fired only on a final close (after reconnect attempts are exhausted or on close()). */
   onClose?: () => void;
+  /** Fired before each reconnect attempt. */
+  onReconnecting?: (attempt: number) => void;
+}
+
+export interface SessionOptions {
+  reconnect?: boolean;
+  maxRetries?: number;
 }
 
 function wsUrl(): string {
@@ -32,9 +43,17 @@ function wsUrl(): string {
 export class SessionSocket {
   private ws: WebSocket | null = null;
   private readonly handlers: SessionHandlers;
+  private readonly reconnect: boolean;
+  private readonly maxRetries: number;
 
-  constructor(handlers: SessionHandlers) {
+  private intentionalClose = false;
+  private attempt = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(handlers: SessionHandlers, options: SessionOptions = {}) {
     this.handlers = handlers;
+    this.reconnect = options.reconnect ?? true;
+    this.maxRetries = options.maxRetries ?? 6;
   }
 
   get isOpen(): boolean {
@@ -42,11 +61,36 @@ export class SessionSocket {
   }
 
   connect(): void {
+    this.intentionalClose = false;
+    this.open();
+  }
+
+  private open(): void {
     const ws = new WebSocket(wsUrl());
     this.ws = ws;
-    ws.onopen = () => this.handlers.onOpen?.();
-    ws.onclose = () => this.handlers.onClose?.();
+
+    ws.onopen = () => {
+      this.attempt = 0;
+      this.handlers.onOpen?.();
+    };
+
+    ws.onclose = () => {
+      if (this.intentionalClose) {
+        this.handlers.onClose?.();
+        return;
+      }
+      if (this.reconnect && this.attempt < this.maxRetries) {
+        this.attempt += 1;
+        const delay = Math.min(8000, 500 * 2 ** (this.attempt - 1));
+        this.handlers.onReconnecting?.(this.attempt);
+        this.retryTimer = setTimeout(() => this.open(), delay);
+      } else {
+        this.handlers.onClose?.();
+      }
+    };
+
     ws.onerror = () => this.handlers.onError?.("WebSocket connection error.");
+
     ws.onmessage = (ev) => {
       let msg: ServerMessage;
       try {
@@ -92,6 +136,11 @@ export class SessionSocket {
   }
 
   close(): void {
+    this.intentionalClose = true;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.ws?.close();
     this.ws = null;
   }

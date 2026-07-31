@@ -33,7 +33,15 @@ let sessionKey: CryptoKey | null = null;
 function read(): VaultData | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  return raw ? (JSON.parse(raw) as VaultData) : null;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as VaultData;
+    // Basic shape check — treat anything malformed as "no vault" rather than crashing.
+    if (parsed?.version === 1 && parsed.salt && parsed.verifier) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function write(data: VaultData): void {
