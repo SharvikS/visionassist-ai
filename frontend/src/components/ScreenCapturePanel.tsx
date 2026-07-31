@@ -24,7 +24,7 @@ const EMPTY_STATS: CaptureStats = {
  * surviving frames over the WebSocket, and ask the model about what's on screen.
  */
 export default function ScreenCapturePanel() {
-  const { activeProvider, activeModel, configured, getKey } = useVault();
+  const { activeProvider, activeModel, getKey } = useVault();
   const [capturing, setCapturing] = useState(false);
   const [stats, setStats] = useState<CaptureStats>(EMPTY_STATS);
   const [wsState, setWsState] = useState("idle");
@@ -36,8 +36,6 @@ export default function ScreenCapturePanel() {
   const captureRef = useRef<ScreenCapture | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  const hasKey = configured.includes(activeProvider);
 
   const teardown = useCallback(() => {
     captureRef.current?.stop();
@@ -55,16 +53,18 @@ export default function ScreenCapturePanel() {
 
   async function start() {
     setError(null);
+    // A key isn't required to share a screen — only to ask the model. If one is configured
+    // we initialize the session so prompts work; otherwise capture/eviction still run.
     const key = await getKey(activeProvider);
-    if (!key) {
-      setError(`No API key configured for ${activeProvider}. Add one first.`);
-      return;
-    }
 
     const socket = new SessionSocket({
       onOpen: () => {
-        setWsState("connecting");
-        socket.init(activeProvider, activeModel, key, SYSTEM_PROMPT);
+        if (key) {
+          setWsState("connecting");
+          socket.init(activeProvider, activeModel, key, SYSTEM_PROMPT);
+        } else {
+          setWsState("no_key");
+        }
       },
       onStatus: (state) => {
         if (state === "ready") setWsState("ready");
@@ -141,8 +141,7 @@ export default function ScreenCapturePanel() {
           {!capturing ? (
             <button
               onClick={start}
-              disabled={!hasKey}
-              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover"
             >
               <MonitorPlay size={15} /> Share screen
             </button>
@@ -155,7 +154,11 @@ export default function ScreenCapturePanel() {
             </button>
           )}
           <span className="text-xs text-muted">
-            {wsState === "ready" ? "● connected" : wsState}
+            {wsState === "ready"
+              ? "● connected"
+              : wsState === "no_key"
+                ? "add an API key to ask"
+                : wsState}
           </span>
         </div>
 
@@ -209,7 +212,13 @@ export default function ScreenCapturePanel() {
             }}
             rows={1}
             disabled={wsState !== "ready"}
-            placeholder={capturing ? "Ask about the screen…" : "Share a screen first"}
+            placeholder={
+              !capturing
+                ? "Share a screen first"
+                : wsState === "no_key"
+                  ? "Add an API key (sidebar) to ask about the screen"
+                  : "Ask about the screen…"
+            }
             className="max-h-32 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50"
           />
           {generating ? (
