@@ -14,6 +14,7 @@ import ApiKeyModal from "./ApiKeyModal";
 import ModelSwitcher from "./ModelSwitcher";
 import ScreenCapturePanel from "./ScreenCapturePanel";
 import TestConsole from "./TestConsole";
+import VoicePanel from "./VoicePanel";
 import { useVault } from "./vault-context";
 
 /** Placeholder for a workspace panel that lands in a later milestone. */
@@ -118,16 +119,20 @@ export default function Dashboard() {
             <ScreenCapturePanel />
           </section>
 
+          {/* Full-duplex voice (Milestone 3) */}
+          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-medium">
+              <Waves size={16} className="text-accent" />
+              Voice
+              <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                M3 · VAD + interrupt
+              </span>
+            </div>
+            <VoicePanel />
+          </section>
+
           {/* Roadmap panels */}
           <section className="space-y-4 lg:col-span-2">
-            <ComingSoon
-              icon={<Waves size={16} />}
-              title="Full-Duplex Voice"
-              milestone="M3"
-            >
-              Talk to the assistant with client-side VAD and mid-sentence interruption; STT
-              and TTS stream over the WebSocket pipeline.
-            </ComingSoon>
             <ComingSoon
               icon={<MousePointerClick size={16} />}
               title="On-Screen Automation"

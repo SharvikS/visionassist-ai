@@ -66,7 +66,10 @@ export class VoiceSession {
   }
 
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Echo cancellation reduces the chance the assistant's own TTS re-triggers the VAD.
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
     this.audioCtx = new AudioContext();
     const source = this.audioCtx.createMediaStreamSource(this.stream);
     this.analyser = this.audioCtx.createAnalyser();
