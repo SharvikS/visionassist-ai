@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/*
+ * VisionAssist AI — dark-first design system.
+ * The product is a dark-mode dashboard, so we commit to a dark palette by default.
+ */
+:root {
+  --background: #0a0b0f;
+  --surface: #12141c;
+  --surface-2: #1a1d28;
+  --border: #262a38;
+  --foreground: #e8eaf0;
+  --muted: #8b90a3;
+  --accent: #6366f1;
+  --accent-hover: #7c7ff2;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin, dark scrollbars to match the shell. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+@keyframes va-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.va-pulse {
+  animation: va-pulse 1.6s ease-in-out infinite;
+}

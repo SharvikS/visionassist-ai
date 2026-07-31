@@ -28,7 +28,7 @@ on active requests.
 
 ```
         ┌───────────────────────── CLIENT BROWSER ─────────────────────────┐
-        │  Next.js 15 (App Router) + Tailwind + Lucide                      │
+        │  Next.js 16 (App Router) + Tailwind + Lucide                      │
         │   • MediaStream Engine  (mic + getDisplayMedia)                   │
         │   • Canvas frame sampler (10 FPS)                                 │
         │   • Smart Frame Eviction (MSE / perceptual hash)                  │
@@ -56,11 +56,11 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 15 (App Router), React 19, TypeScript |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Tailwind CSS v4 + Lucide Icons |
 | Client A/V | HTML5 Canvas, Web Audio API, Silero VAD (WASM) |
 | Transport | WebSockets / WebRTC (aiortc) |
-| Backend | Python 3.12+, FastAPI, asyncio |
+| Backend | Python 3.12+ (tested 3.14), FastAPI, asyncio |
 | Security | Web Crypto API (AES-GCM) |
 | Automation | Playwright / PyAutoGUI |
 
@@ -70,7 +70,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
 ```
 visionassist-ai/
-├── frontend/     # Next.js 15 dashboard (BYOK vault, workspace, streaming client)
+├── frontend/     # Next.js 16 dashboard (BYOK vault, workspace, streaming client)
 ├── backend/      # FastAPI orchestrator (model router, streaming pipeline)
 ├── docs/         # Architecture, roadmap, API contracts
 └── README.md
@@ -103,7 +103,7 @@ npm run dev   # http://localhost:3000
 
 ## 🗺️ Roadmap
 
-- [ ] **M1 — Core Platform & BYOK** · dashboard UI, Web Crypto vault, model router
+- [x] **M1 — Core Platform & BYOK** · dashboard UI, Web Crypto vault, model router
 - [ ] **M2 — Streaming Pipeline & Screen Capture** · getDisplayMedia, canvas sampling, frame eviction, WS
 - [ ] **M3 — Voice & Interruption** · Web Audio, Silero VAD, STT/TTS streaming, interrupt handler
 - [ ] **M4 — On-Screen Automation** · JSON action schema, coordinate mapper, Playwright runner
