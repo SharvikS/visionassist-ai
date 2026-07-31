@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send, Square } from "lucide-react";
 import { streamChat, type ChatMessage } from "@/lib/api";
 import { useVault } from "./vault-context";
@@ -21,8 +21,14 @@ export default function TestConsole() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const hasKey = configured.includes(activeProvider);
+
+  // Keep the latest message in view as tokens stream in.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [turns]);
 
   async function send() {
     const prompt = input.trim();
@@ -35,8 +41,12 @@ export default function TestConsole() {
       return;
     }
 
+    // Drop any empty turns (e.g. an errored/aborted assistant reply) — providers reject
+    // messages with no content.
     const history: ChatMessage[] = [
-      ...turns.map((t) => ({ role: t.role, text: t.text })),
+      ...turns
+        .filter((t) => t.text.trim().length > 0)
+        .map((t) => ({ role: t.role, text: t.text })),
       { role: "user", text: prompt },
     ];
     setTurns((t) => [...t, { role: "user", text: prompt }, { role: "assistant", text: "" }]);
@@ -78,7 +88,7 @@ export default function TestConsole() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {turns.length === 0 && (
           <div className="flex h-full items-center justify-center text-center text-sm text-muted">
             <div>
