@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import ApiKeyModal from "./ApiKeyModal";
 import ModelSwitcher from "./ModelSwitcher";
+import ScreenCapturePanel from "./ScreenCapturePanel";
 import TestConsole from "./TestConsole";
 import { useVault } from "./vault-context";
 
@@ -105,16 +106,20 @@ export default function Dashboard() {
             <TestConsole />
           </section>
 
+          {/* Screen capture + vision-over-WebSocket (Milestone 2) */}
+          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-medium">
+              <MonitorPlay size={16} className="text-accent" />
+              Screen Vision
+              <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                M2 · frame eviction
+              </span>
+            </div>
+            <ScreenCapturePanel />
+          </section>
+
           {/* Roadmap panels */}
-          <section className="space-y-4">
-            <ComingSoon
-              icon={<MonitorPlay size={16} />}
-              title="Screen Capture & Frame Eviction"
-              milestone="M2"
-            >
-              Share a tab or window; a 10 FPS canvas sampler streams only visually-changed
-              frames to the model to save tokens.
-            </ComingSoon>
+          <section className="space-y-4 lg:col-span-2">
             <ComingSoon
               icon={<Waves size={16} />}
               title="Full-Duplex Voice"
