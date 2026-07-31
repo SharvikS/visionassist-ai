@@ -49,3 +49,39 @@ def test_ws_unknown_type_errors():
         ws.receive_json()
         ws.send_json({"type": "bogus"})
         assert ws.receive_json()["type"] == "error"
+
+
+def test_ws_malformed_json_is_reported_not_fatal():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_text("{not json")
+        err = ws.receive_json()
+        assert err["type"] == "error"
+        # Session survives — a subsequent valid message still works.
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+
+def test_ws_non_object_message_rejected():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json([1, 2, 3])
+        assert ws.receive_json()["type"] == "error"
+
+
+def test_ws_oversized_frame_rejected():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "frame", "data": "A" * 12_000_001})
+        assert ws.receive_json()["type"] == "error"
+
+
+def test_ws_init_unknown_provider_errors():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "init", "provider": "bogus", "model": "x", "apiKey": "k"})
+        # First an error, then a status with state "error".
+        first = ws.receive_json()
+        assert first["type"] == "error"
+        status = ws.receive_json()
+        assert status["state"] == "error"

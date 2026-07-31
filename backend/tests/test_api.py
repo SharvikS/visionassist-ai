@@ -44,6 +44,42 @@ def test_unknown_provider_rejected_by_schema():
     assert r.status_code == 422
 
 
+def test_empty_messages_rejected():
+    r = client.post(
+        "/chat",
+        headers={"X-Provider-Key": "sk-test"},
+        json={"provider": "openai", "model": "gpt-4o", "messages": []},
+    )
+    assert r.status_code == 422
+
+
+def test_blank_message_content_rejected():
+    r = client.post(
+        "/chat",
+        headers={"X-Provider-Key": "sk-test"},
+        json={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "text": "   "}],
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_out_of_range_max_tokens_rejected():
+    r = client.post(
+        "/chat",
+        headers={"X-Provider-Key": "sk-test"},
+        json={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "text": "hi"}],
+            "max_tokens": 999999,
+        },
+    )
+    assert r.status_code == 422
+
+
 def test_anthropic_payload_maps_system_and_images():
     msgs = [
         Message(role="system", text="be terse"),

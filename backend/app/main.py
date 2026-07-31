@@ -2,14 +2,36 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from . import __version__
 from .config import get_settings
 from .routes import chat, health, voice, ws
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("visionassist")
+
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    logger.info(
+        "VisionAssist AI orchestrator v%s starting (CORS: %s)",
+        __version__,
+        ", ".join(settings.cors_origin_list) or "<none>",
+    )
+    yield
+    logger.info("VisionAssist AI orchestrator shutting down")
+
 
 app = FastAPI(
     title="VisionAssist AI — Orchestrator",
@@ -18,15 +40,24 @@ app = FastAPI(
         "Privacy-first BYOK orchestrator. Routes streaming multimodal calls to the user's "
         "chosen LLM provider. API keys are never persisted server-side."
     ),
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
+    allow_credentials=False,  # BYOK key travels in a header, not cookies — no credentials.
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    """Never leak stack traces or internals to clients; log server-side instead."""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error."})
+
 
 app.include_router(health.router)
 app.include_router(chat.router)
