@@ -24,6 +24,15 @@ The backend must be running (default `http://localhost:8000`) for the Model Test
 - **Model Test Console** — streams a live completion through the backend router to verify a
   provider + key end-to-end (`src/components/TestConsole.tsx`).
 
+## What's implemented (Milestone 2)
+
+- **Screen capture** — `getDisplayMedia` + a 10 FPS offscreen-canvas sampler (`src/lib/capture.ts`).
+- **Smart Frame Eviction** — grayscale-signature + MSE differencing drops visually-identical
+  frames before they cost vision tokens (`src/lib/frame-eviction.ts`).
+- **Full-duplex WebSocket** — `SessionSocket` over `/ws/session` (`src/lib/ws.ts`).
+- **Screen Vision panel** — live preview, eviction stats, and ask-about-your-screen streaming
+  with an interrupt button (`src/components/ScreenCapturePanel.tsx`).
+
 ## Structure
 
 ```

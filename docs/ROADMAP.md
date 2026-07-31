@@ -10,11 +10,12 @@ build on it without rework.
 - [ ] FastAPI backend skeleton (health, config)
 - [ ] Model router to test provider responses (OpenAI, Anthropic, Gemini)
 
-## Milestone 2 — Streaming Pipeline & Screen Capture
-- [ ] `navigator.mediaDevices.getDisplayMedia()` capture
-- [ ] HTML5 Canvas sampling pipeline @ 10 FPS
-- [ ] Perceptual-hash / MSE frame-difference eviction engine
-- [ ] Bi-directional WebSocket between Next.js and FastAPI
+## Milestone 2 — Streaming Pipeline & Screen Capture ✅
+- [x] `navigator.mediaDevices.getDisplayMedia()` capture
+- [x] HTML5 Canvas sampling pipeline @ 10 FPS
+- [x] Perceptual-hash / MSE frame-difference eviction engine
+- [x] Bi-directional WebSocket between Next.js and FastAPI
+- [x] Bonus: vision-over-WebSocket — ask questions about the live screen
 
 ## Milestone 3 — Voice Integration & Interruption Management
 - [ ] Browser audio recording via Web Audio API

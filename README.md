@@ -104,7 +104,7 @@ npm run dev   # http://localhost:3000
 ## 🗺️ Roadmap
 
 - [x] **M1 — Core Platform & BYOK** · dashboard UI, Web Crypto vault, model router
-- [ ] **M2 — Streaming Pipeline & Screen Capture** · getDisplayMedia, canvas sampling, frame eviction, WS
+- [x] **M2 — Streaming Pipeline & Screen Capture** · getDisplayMedia, canvas sampling, frame eviction, WS
 - [ ] **M3 — Voice & Interruption** · Web Audio, Silero VAD, STT/TTS streaming, interrupt handler
 - [ ] **M4 — On-Screen Automation** · JSON action schema, coordinate mapper, Playwright runner
 - [ ] **M5 — Polish, Rate-limiting & Deploy** · cost overlay, confirmation modals, Docker, Vercel + Fly.io
