@@ -1,8 +1,11 @@
 # VisionAssist AI — Backend
 
-FastAPI orchestrator. Provider-agnostic model router over OpenAI, Anthropic, and Gemini.
-**BYOK**: the client sends its provider key in the `X-Provider-Key` header per request; the
-server never persists it.
+FastAPI orchestrator. Provider-agnostic model router over OpenAI, Anthropic, and Gemini,
+plus the voice (STT/TTS) pipeline and the WebSocket control plane.
+
+**BYOK**: the client sends its provider key per request (`X-Provider-Key` header for HTTP,
+the `init` message for WebSocket sessions). The server holds it in memory for the life of
+that request or connection and never persists it.
 
 ## Run
 
@@ -22,6 +25,10 @@ Open http://localhost:8000/docs for interactive API docs.
 | `GET`  | `/providers` | Catalog of providers + selectable models. |
 | `POST` | `/chat` | Non-streaming completion (routes by `provider`). |
 | `POST` | `/chat/stream` | SSE token stream. |
+| `POST` | `/voice/stt` | Transcribe an audio blob (Whisper). |
+| `POST` | `/voice/tts` | Stream synthesized speech (MP3). |
+| `GET`  | `/voice/voices` | Available TTS voices and default models. |
+| `WS`   | `/ws/session` | Full-duplex session: frames in, tokens out. |
 
 ### Example
 
@@ -31,30 +38,71 @@ curl -s http://localhost:8000/chat \
   -H "X-Provider-Key: $ANTHROPIC_API_KEY" \
   -d '{
         "provider": "anthropic",
-        "model": "claude-3-5-sonnet-20241022",
+        "model": "claude-sonnet-5",
         "messages": [{"role": "user", "text": "Say hi in 3 words."}]
       }'
 ```
+
+## Performance notes
+
+A few things here are load-bearing and easy to regress:
+
+- **One pooled `httpx.AsyncClient` for the whole process** (`app/http_client.py`). Provider
+  adapters call `self._client()` and must **never** wrap it in `async with` — that would
+  close the shared pool. A client per request costs a full TLS handshake on every call,
+  straight out of the user's time-to-first-token.
+- **SSE responses set `X-Accel-Buffering: no`** and `Cache-Control: no-transform`. Without
+  them, nginx and most CDNs buffer the whole stream and token streaming stops being
+  streaming.
+- **WebSocket generations are cancelled with `await`** (`_cancel_and_wait`). `Task.cancel()`
+  alone only *requests* cancellation, so barge-in could otherwise interleave two answers
+  onto the same socket.
+- **Frames are acknowledged once, not per frame.** They arrive at up to 10 FPS and the
+  client tracks its own stats, so per-frame acks were pure round-trip noise.
+
+### Anthropic request shape
+
+Claude 5-series models reject `temperature`/`top_p`/`top_k` with a 400, so the adapter omits
+them for those models and steers behaviour by prompt instead. It also sends
+`thinking: {"type": "disabled"}`: this is a real-time assistant where latency is the product,
+and thinking tokens would otherwise share the `max_tokens` budget with the answer.
+
+## Configuration
+
+All settings are environment-driven with a `VA_` prefix (see `.env.example`). No provider
+keys live here — VisionAssist is BYOK.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `VA_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins. |
+| `VA_PROVIDER_TIMEOUT` | `60.0` | Upstream read timeout (seconds). |
+| `VA_CONNECT_TIMEOUT` | `10.0` | Upstream connect timeout — fails fast on a dead network. |
+| `VA_MAX_CONNECTIONS` | `100` | Connection-pool ceiling. |
+| `VA_MAX_KEEPALIVE_CONNECTIONS` | `20` | Warm connections kept between requests. |
+| `VA_KEEPALIVE_EXPIRY` | `60.0` | Seconds an idle pooled connection is retained. |
+| `VA_WS_IDLE_TIMEOUT` | `300.0` | Close silent WebSocket sessions (frees the in-memory key). |
 
 ## Layout
 
 ```
 app/
-├── main.py            # FastAPI app + CORS
+├── main.py            # FastAPI app, CORS, lifespan (owns the pooled HTTP client)
 ├── config.py          # env-driven settings (no keys)
-├── schemas.py         # shared pydantic models
+├── http_client.py     # shared pooled httpx.AsyncClient
+├── schemas.py         # shared pydantic models + input limits
 ├── router.py          # ModelRouter — provider-agnostic dispatch
+├── voice.py           # Whisper STT + OpenAI TTS
 ├── providers/         # one adapter per provider
 │   ├── base.py
 │   ├── anthropic_provider.py
 │   ├── openai_provider.py
 │   └── gemini_provider.py
-└── routes/            # health + chat HTTP routes
+└── routes/            # health, chat, voice, ws
 ```
 
 ## Tests
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 pytest
 ```

@@ -16,16 +16,17 @@ brokers streaming multimodal calls to the user's chosen LLM provider and drives 
 4. **Provider-agnostic core.** A single `ModelRouter` abstracts OpenAI / Anthropic / Gemini
    behind one streaming interface so models are hot-swappable at runtime.
 
-## Client (Next.js 15)
+## Client (Next.js 16)
 
 | Module | Responsibility |
 |--------|----------------|
 | `MediaStream Engine` | Acquires mic audio + `getDisplayMedia()` screen stream. |
-| `Canvas Sampler` | Draws the video stream to an offscreen canvas at ~10 FPS, extracts frame buffers. |
-| `Smart Frame Eviction` | Computes MSE / perceptual-hash delta between consecutive frames; drops stagnant ones. |
-| `VAD (Silero WASM)` | Detects speech onset/offset in-browser to gate audio and trigger interrupts. |
+| `Canvas Sampler` | Samples the video stream at ~10 FPS. Diffs a 32×32 thumbnail first and only draws/encodes the full frame when it survives eviction. |
+| `Smart Frame Eviction` | Computes the grayscale-signature MSE delta between consecutive frames; drops stagnant ones. |
+| `VAD` | Detects speech onset/offset in-browser to gate audio and trigger interrupts. Currently an energy (RMS) detector behind a callback interface a Silero-WASM model can replace. |
+| `SpeechQueue` | Synthesizes and plays assistant speech sentence by sentence, overlapping synthesis with generation. |
 | `BYOK Vault` | AES-GCM encrypt/decrypt of provider keys; stored in `localStorage`. |
-| `Transport` | WebSocket (control + JSON) and/or WebRTC (media) full-duplex channel. |
+| `Transport` | WebSocket (control + JSON) full-duplex channel, with reconnect and send-buffer backpressure. |
 
 ## Server (FastAPI)
 
@@ -38,18 +39,31 @@ brokers streaming multimodal calls to the user's chosen LLM provider and drives 
 
 ## Control-plane message contract (WebSocket)
 
-All control messages are JSON with a `type` discriminator:
+All control messages are JSON with a `type` discriminator.
+
+**Implemented today:**
 
 | `type` | Direction | Purpose |
 |--------|-----------|---------|
-| `frame` | client → server | A visual frame (base64 JPEG) that survived eviction. |
-| `audio` | client → server | An audio chunk (PCM/opus) for STT. |
+| `init` | client → server | Provider, model, BYOK key, and system prompt for this session. |
+| `frame` | client → server | A visual frame (base64 JPEG) that survived eviction. Only the most recent is retained. |
 | `prompt` | client → server | A user text/voice prompt cue. |
-| `cancel` | client → server | Interrupt: purge TTS + halt generation. |
+| `cancel` | client → server | Interrupt: halt the in-flight generation. |
+| `ping` | client → server | Keep-alive; answered with `pong`. |
+| `status` | server → client | `connected`, `ready`, `generating`, `interrupted`, `cancelled`, `idle_timeout`, and a single `frame_received` ack per session. |
 | `token` | server → client | Streaming text token from the LLM. |
-| `tts` | server → client | Streaming audio chunk. |
+| `done` | server → client | Generation finished normally. |
+| `error` | server → client | Validation or upstream failure; the session stays open. |
+| `pong` | server → client | Reply to `ping`. |
+
+**Planned (M4):**
+
+| `type` | Direction | Purpose |
+|--------|-----------|---------|
 | `action` | server → client | Proposed automation action (see below). |
-| `status` | server → client | Pipeline / usage / error status. |
+
+Audio does not cross this socket. STT and TTS use the `/voice/*` HTTP endpoints, which keeps
+the control plane small and lets speech synthesis be pipelined per sentence on the client.
 
 ## Automation action schema
 
