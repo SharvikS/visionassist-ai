@@ -27,6 +27,16 @@ export interface ChatResult {
   output_tokens: number | null;
 }
 
+/** SSE payloads are JSON strings; fall back to the raw line if that ever changes. */
+function safeParse(dataLine: string): string {
+  try {
+    const value = JSON.parse(dataLine);
+    return typeof value === "string" ? value : dataLine;
+  } catch {
+    return dataLine;
+  }
+}
+
 async function parseError(res: Response): Promise<string> {
   try {
     const body = await res.json();
@@ -83,9 +93,11 @@ export async function streamChat(
         lines.find((l) => l.startsWith("event:"))?.slice(6).trim() ?? "message";
       const dataLine = lines.find((l) => l.startsWith("data:"))?.slice(5).trim();
       if (dataLine === undefined) continue;
-      if (eventType === "error") throw new Error(dataLine);
+      // Both token and error payloads are JSON-encoded so embedded newlines and
+      // quotes can't break SSE framing.
+      if (eventType === "error") throw new Error(safeParse(dataLine));
       if (eventType === "done") return;
-      onToken(JSON.parse(dataLine) as string);
+      onToken(safeParse(dataLine));
     }
   }
 }

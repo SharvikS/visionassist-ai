@@ -1,4 +1,13 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
+
+/**
+ * Pin the Turbopack root to this directory. Next.js otherwise infers the workspace root by
+ * walking up for a lockfile, which picks up an unrelated one on some machines and silently
+ * widens the file-watching scope. Pinning it keeps builds identical everywhere.
+ */
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Security headers applied to every response. A strict Content-Security-Policy is
@@ -20,6 +29,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  turbopack: { root: projectRoot },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

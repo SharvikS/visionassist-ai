@@ -36,6 +36,20 @@ export interface SessionOptions {
   maxRetries?: number;
 }
 
+/**
+ * Frames are dropped while more than this many bytes are still queued in the socket's
+ * send buffer. Roughly two full frames — enough to absorb a hiccup, small enough that
+ * the model always sees something close to the live screen instead of a growing backlog.
+ */
+const MAX_BUFFERED_BYTES = 1_000_000;
+
+/**
+ * Heartbeat interval. The server closes sessions that go silent (see VA_WS_IDLE_TIMEOUT) to
+ * reclaim half-open connections. A quiet-but-alive session — voice waiting for the user to
+ * speak — must keep pinging or it would be reaped mid-conversation.
+ */
+const HEARTBEAT_MS = 30_000;
+
 function wsUrl(): string {
   return `${API_BASE.replace(/^http/, "ws")}/ws/session`;
 }
@@ -49,6 +63,7 @@ export class SessionSocket {
   private intentionalClose = false;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(handlers: SessionHandlers, options: SessionOptions = {}) {
     this.handlers = handlers;
@@ -58,6 +73,19 @@ export class SessionSocket {
 
   get isOpen(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** Bytes queued but not yet handed to the network. */
+  get bufferedAmount(): number {
+    return this.ws?.bufferedAmount ?? 0;
+  }
+
+  /**
+   * Whether a frame can be sent without growing a backlog. Callers producing frames on a
+   * timer should check this and drop rather than queue — see ScreenCapture's `canSend`.
+   */
+  get canSendFrame(): boolean {
+    return this.isOpen && this.bufferedAmount < MAX_BUFFERED_BYTES;
   }
 
   connect(): void {
@@ -71,10 +99,12 @@ export class SessionSocket {
 
     ws.onopen = () => {
       this.attempt = 0;
+      this.startHeartbeat();
       this.handlers.onOpen?.();
     };
 
     ws.onclose = () => {
+      this.stopHeartbeat();
       if (this.intentionalClose) {
         this.handlers.onClose?.();
         return;
@@ -85,11 +115,19 @@ export class SessionSocket {
         this.handlers.onReconnecting?.(this.attempt);
         this.retryTimer = setTimeout(() => this.open(), delay);
       } else {
+        // Only surface a connection failure once we've actually given up — a transient
+        // drop that reconnects cleanly shouldn't flash an error at the user.
+        if (this.reconnect && this.attempt >= this.maxRetries) {
+          this.handlers.onError?.("Lost connection to the server. Please retry.");
+        }
         this.handlers.onClose?.();
       }
     };
 
-    ws.onerror = () => this.handlers.onError?.("WebSocket connection error.");
+    // Intentionally quiet: every reconnect attempt fires `error` before `close`, so
+    // reporting here would surface an error banner during normal recovery. The close
+    // handler above reports once retries are exhausted.
+    ws.onerror = () => {};
 
     ws.onmessage = (ev) => {
       let msg: ServerMessage;
@@ -115,6 +153,22 @@ export class SessionSocket {
     };
   }
 
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      // Skip the ping if the socket is already backed up — adding to a full buffer
+      // helps nothing, and a draining buffer is proof the connection is alive.
+      if (this.isOpen && this.bufferedAmount === 0) this.send({ type: "ping" });
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
   private send(obj: Record<string, unknown>): void {
     if (this.isOpen) this.ws!.send(JSON.stringify(obj));
   }
@@ -137,6 +191,7 @@ export class SessionSocket {
 
   close(): void {
     this.intentionalClose = true;
+    this.stopHeartbeat();
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;

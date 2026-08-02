@@ -15,10 +15,16 @@ class GeminiProvider(BaseProvider):
     info = ProviderInfo(
         id="gemini",
         label="Google (Gemini)",
-        default_model="gemini-1.5-pro",
-        models=["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"],
+        default_model="gemini-2.0-flash",
+        models=["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"],
         supports_vision=True,
     )
+
+    @staticmethod
+    def _headers(api_key: str) -> dict[str, str]:
+        # Header auth rather than `?key=` — a key in the query string ends up in
+        # proxy and access logs.
+        return {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
     @staticmethod
     def _role(role: str) -> str:
@@ -60,11 +66,11 @@ class GeminiProvider(BaseProvider):
 
     async def chat(self, *, api_key, model, messages, max_tokens, temperature) -> ChatResponse:
         payload = self._build_payload(messages, max_tokens, temperature)
-        url = f"{_BASE}/{model}:generateContent?key={api_key}"
-        async with self._client() as client:
-            resp = await client.post(url, json=payload)
-            self._raise_for_upstream(resp)
-            data = resp.json()
+        url = f"{_BASE}/{model}:generateContent"
+        client = self._client()
+        resp = await client.post(url, headers=self._headers(api_key), json=payload)
+        self._raise_for_upstream(resp)
+        data = resp.json()
         usage = data.get("usageMetadata", {})
         return ChatResponse(
             provider="gemini", model=model, text=self._extract_text(data),
@@ -74,17 +80,23 @@ class GeminiProvider(BaseProvider):
 
     async def stream_chat(self, *, api_key, model, messages, max_tokens, temperature) -> AsyncIterator[str]:
         payload = self._build_payload(messages, max_tokens, temperature)
-        url = f"{_BASE}/{model}:streamGenerateContent?alt=sse&key={api_key}"
-        async with self._client() as client:
-            async with client.stream("POST", url, json=payload) as resp:
-                if resp.status_code >= 400:
-                    self._raise_for_status(resp.status_code, await resp.aread())
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    raw = line[5:].strip()
-                    if not raw:
-                        continue
-                    text = self._extract_text(json.loads(raw))
-                    if text:
-                        yield text
+        url = f"{_BASE}/{model}:streamGenerateContent?alt=sse"
+        client = self._client()
+        async with client.stream(
+            "POST", url, headers=self._headers(api_key), json=payload
+        ) as resp:
+            if resp.status_code >= 400:
+                self._raise_for_status(resp.status_code, await resp.aread())
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                raw = line[5:].strip()
+                if not raw:
+                    continue
+                try:
+                    event = json.loads(raw)
+                except ValueError:
+                    continue  # keep-alive / partial frame — not fatal to the stream
+                text = self._extract_text(event)
+                if text:
+                    yield text

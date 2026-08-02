@@ -4,11 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { SessionSocket } from "@/lib/ws";
 import { VoiceSession } from "@/lib/voice-session";
+import { SpeechQueue } from "@/lib/speech-queue";
 import { synthesize, transcribe } from "@/lib/voice-api";
 import { useVault } from "./vault-context";
 
 const SYSTEM_PROMPT =
-  "You are VisionAssist, a friendly voice assistant. Keep spoken answers brief and natural.";
+  "You are VisionAssist, a friendly voice assistant. Keep spoken answers brief and natural. " +
+  "Answers are read aloud, so write plain prose — no markdown, lists, or code blocks. " +
+  "Do not include internal or system XML tags in your response.";
 const VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
 
 type VoiceState = "idle" | "listening" | "thinking" | "speaking";
@@ -30,13 +33,18 @@ export default function VoicePanel() {
 
   const voiceRef = useRef<VoiceSession | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
+  const speechRef = useRef<SpeechQueue | null>(null);
   const openaiKeyRef = useRef<string | null>(null);
+  const voiceNameRef = useRef(voice);
   const answerRef = useRef("");
   const stateRef = useRef<VoiceState>("idle");
 
   const hasOpenAiKey = configured.includes("openai");
+
+  // Read by the speech queue's synthesize callback, which outlives any given render.
+  useEffect(() => {
+    voiceNameRef.current = voice;
+  }, [voice]);
 
   const setPhase = useCallback((s: VoiceState) => {
     stateRef.current = s;
@@ -44,14 +52,7 @@ export default function VoicePanel() {
   }, []);
 
   const stopPlayback = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
+    speechRef.current?.stop();
   }, []);
 
   const teardown = useCallback(() => {
@@ -59,38 +60,14 @@ export default function VoicePanel() {
     voiceRef.current = null;
     socketRef.current?.close();
     socketRef.current = null;
-    stopPlayback();
+    speechRef.current?.stop();
+    speechRef.current = null;
     setActive(false);
     setLevel(0);
     setPhase("idle");
-  }, [setPhase, stopPlayback]);
+  }, [setPhase]);
 
   useEffect(() => () => teardown(), [teardown]);
-
-  async function speak(text: string) {
-    const key = openaiKeyRef.current;
-    if (!key || !text.trim()) {
-      setPhase("listening");
-      return;
-    }
-    try {
-      const blob = await synthesize(text, key, voice);
-      // A newer utterance may have interrupted us while synthesizing — bail if so.
-      if (stateRef.current === "listening") return;
-      const url = URL.createObjectURL(blob);
-      audioUrlRef.current = url;
-      const audio = new Audio(url);
-      audio.onended = () => {
-        if (stateRef.current === "speaking") setPhase("listening");
-      };
-      audioRef.current = audio;
-      setPhase("speaking");
-      await audio.play().catch(() => {});
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "TTS failed.");
-      setPhase("listening");
-    }
-  }
 
   async function start() {
     setError(null);
@@ -102,14 +79,30 @@ export default function VoicePanel() {
     const llmKey = (await getKey(activeProvider)) ?? openaiKey;
     openaiKeyRef.current = openaiKey;
 
+    // Synthesis runs a sentence at a time, overlapped with generation, so the user
+    // hears the first sentence while the rest of the answer is still arriving.
+    const speech = new SpeechQueue({
+      synthesize: (text) => synthesize(text, openaiKey, voiceNameRef.current),
+      onStart: () => {
+        if (stateRef.current !== "listening") setPhase("speaking");
+      },
+      onIdle: () => {
+        if (stateRef.current === "speaking") setPhase("listening");
+      },
+      onError: (err) => setError(err.message),
+    });
+    speechRef.current = speech;
+
     const socket = new SessionSocket({
       onOpen: () => socket.init(activeProvider, activeModel, llmKey, SYSTEM_PROMPT),
       onToken: (t) => {
         answerRef.current += t;
         setAnswer(answerRef.current);
+        // Don't start speaking over a user who has already barged in.
+        if (stateRef.current !== "listening") speech.push(t);
       },
       onDone: () => {
-        if (stateRef.current !== "listening") void speak(answerRef.current);
+        if (stateRef.current !== "listening") speech.flush();
       },
       onError: (detail) => setError(detail),
       onClose: () => {},

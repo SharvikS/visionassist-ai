@@ -21,6 +21,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from starlette.websockets import WebSocketState
 
+from ..config import get_settings
 from ..providers import ProviderError
 from ..router import get_router
 from ..schemas import MAX_IMAGE_B64_CHARS, ChatRequest, Message, Provider
@@ -41,6 +42,7 @@ class Session:
         self.system: str | None = None
         self.latest_frame: str | None = None  # base64 JPEG that survived eviction
         self.task: asyncio.Task | None = None
+        self.frames_seen = 0
 
     @property
     def configured(self) -> bool:
@@ -51,12 +53,18 @@ class Session:
 async def session_socket(ws: WebSocket) -> None:
     await ws.accept()
     session = Session()
+    idle_timeout = get_settings().ws_idle_timeout
     await _safe_send(ws, {"type": "status", "state": "connected"})
 
     try:
         while True:
             try:
-                msg = await ws.receive_json()
+                # An abandoned tab would otherwise hold the connection — and the
+                # in-memory API key — open forever.
+                msg = await asyncio.wait_for(ws.receive_json(), timeout=idle_timeout)
+            except asyncio.TimeoutError:
+                await _safe_send(ws, {"type": "status", "state": "idle_timeout"})
+                break
             except (ValueError, TypeError):
                 # Non-JSON / malformed text frame — report and keep the session alive.
                 await _safe_send(ws, {"type": "error", "detail": "Malformed JSON message."})
@@ -73,7 +81,10 @@ async def session_socket(ws: WebSocket) -> None:
     except Exception:  # noqa: BLE001 — last-resort guard so one bad message can't leak a task
         logger.exception("Unexpected error in WebSocket session")
     finally:
-        _cancel(session)
+        await _cancel_and_wait(session)
+        # Drop the key as soon as the socket is gone rather than waiting for GC.
+        session.api_key = None
+        session.latest_frame = None
 
 
 async def _dispatch(ws: WebSocket, session: Session, msg: dict[str, Any]) -> None:
@@ -100,13 +111,18 @@ async def _dispatch(ws: WebSocket, session: Session, msg: dict[str, Any]) -> Non
             await _safe_send(ws, {"type": "error", "detail": "Invalid or oversized frame."})
             return
         session.latest_frame = data  # keep only the most recent surviving frame
-        await _safe_send(ws, {"type": "status", "state": "frame_received"})
+        session.frames_seen += 1
+        # Only acknowledge the first frame. Frames arrive at up to 10 FPS and the
+        # client tracks its own capture stats, so per-frame acks were pure
+        # round-trip noise on the hot path.
+        if session.frames_seen == 1:
+            await _safe_send(ws, {"type": "status", "state": "frame_received"})
 
     elif mtype == "prompt":
         await _handle_prompt(ws, session, str(msg.get("text", "")))
 
     elif mtype == "cancel":
-        _cancel(session)
+        await _cancel_and_wait(session)
         await _safe_send(ws, {"type": "status", "state": "cancelled"})
 
     else:
@@ -132,9 +148,25 @@ async def _safe_send(ws: WebSocket, payload: dict[str, Any]) -> bool:
         return False
 
 
-def _cancel(session: Session) -> None:
-    if session.task and not session.task.done():
-        session.task.cancel()
+async def _cancel_and_wait(session: Session) -> bool:
+    """Cancel any in-flight generation and wait for it to actually stop.
+
+    Awaiting matters: `Task.cancel()` only *requests* cancellation. Without the
+    await, the outgoing generation can still be mid-`send_json` when the next one
+    starts, and the two interleave their tokens on the same socket.
+
+    Returns True if a running generation was actually interrupted.
+    """
+    task = session.task
+    session.task = None
+    if task is None or task.done():
+        return False
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):  # noqa: BLE001 — teardown path
+        pass
+    return True
 
 
 async def _handle_prompt(ws: WebSocket, session: Session, text: str) -> None:
@@ -142,7 +174,10 @@ async def _handle_prompt(ws: WebSocket, session: Session, text: str) -> None:
         await _safe_send(ws, {"type": "error", "detail": "Session not initialized with a key."})
         return
 
-    _cancel(session)  # interrupt any in-flight generation before starting a new one
+    # Interrupt any in-flight generation and let it fully unwind before starting
+    # a new one, so barge-in can't interleave two answers.
+    if await _cancel_and_wait(session):
+        await _safe_send(ws, {"type": "status", "state": "interrupted"})
 
     try:
         req = _build_request(session, text)
@@ -158,9 +193,6 @@ async def _handle_prompt(ws: WebSocket, session: Session, text: str) -> None:
                 if not await _safe_send(ws, {"type": "token", "text": token}):
                     return  # peer disconnected mid-stream
             await _safe_send(ws, {"type": "done"})
-        except asyncio.CancelledError:
-            await _safe_send(ws, {"type": "status", "state": "interrupted"})
-            raise
         except ProviderError as e:
             await _safe_send(ws, {"type": "error", "detail": str(e)})
         except Exception:  # noqa: BLE001

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from . import __version__
 from .config import get_settings
+from .http_client import aclose_client, get_client
 from .routes import chat, health, voice, ws
 
 logging.basicConfig(
@@ -24,12 +25,16 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Build the pooled upstream client up front so the first user request
+    # doesn't pay client construction on top of its TLS handshake.
+    get_client()
     logger.info(
         "VisionAssist AI orchestrator v%s starting (CORS: %s)",
         __version__,
         ", ".join(settings.cors_origin_list) or "<none>",
     )
     yield
+    await aclose_client()
     logger.info("VisionAssist AI orchestrator shutting down")
 
 

@@ -21,7 +21,7 @@ def test_ws_init_reports_ready():
         ws.send_json({
             "type": "init",
             "provider": "anthropic",
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-5",
             "apiKey": "sk-ant-test",
         })
         status = ws.receive_json()

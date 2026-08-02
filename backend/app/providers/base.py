@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from ..http_client import get_client
 from ..schemas import ChatResponse, Message, ProviderInfo
 
 
@@ -48,14 +49,14 @@ class BaseProvider(ABC):
     # -- shared helpers -------------------------------------------------------
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=self._timeout)
+        """The shared pooled client — never close it from a request handler."""
+        return get_client()
 
     @staticmethod
     def _raise_for_upstream(resp: httpx.Response) -> None:
         if resp.status_code >= 400:
-            detail = resp.text[:500]
             raise ProviderError(
-                f"Upstream provider error ({resp.status_code}): {detail}",
+                _upstream_message(resp.status_code, resp.text),
                 status_code=resp.status_code,
             )
 
@@ -64,7 +65,21 @@ class BaseProvider(ABC):
         """Streaming-friendly variant that takes an already-read error body."""
         if status_code >= 400:
             raise ProviderError(
-                f"Upstream provider error ({status_code}): "
-                f"{body[:500].decode('utf-8', 'replace')}",
+                _upstream_message(status_code, body.decode("utf-8", "replace")),
                 status_code=status_code,
             )
+
+
+#: Upstream 4xx bodies sometimes echo back request material. Auth failures in
+#: particular are the one case where a provider may quote the key it rejected,
+#: so those get a fixed message instead of the upstream text.
+_OPAQUE_STATUSES = frozenset({401, 403})
+
+
+def _upstream_message(status_code: int, body: str) -> str:
+    if status_code in _OPAQUE_STATUSES:
+        return (
+            f"Upstream provider rejected the API key ({status_code}). "
+            "Check that the key is valid and has access to the selected model."
+        )
+    return f"Upstream provider error ({status_code}): {body[:500]}"

@@ -27,7 +27,7 @@ def test_chat_requires_key():
         "/chat",
         json={
             "provider": "anthropic",
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-5",
             "messages": [{"role": "user", "text": "hi"}],
         },
     )
@@ -85,7 +85,7 @@ def test_anthropic_payload_maps_system_and_images():
         Message(role="system", text="be terse"),
         Message(role="user", text="what is this?", images=["QUJD"]),
     ]
-    payload = AnthropicProvider()._build_payload("claude-3-5-sonnet-20241022", msgs, 256, 0.5)
+    payload = AnthropicProvider()._build_payload("claude-sonnet-5", msgs, 256, 0.5)
     assert payload["system"] == "be terse"
     assert payload["messages"][0]["role"] == "user"
     content_types = [c["type"] for c in payload["messages"][0]["content"]]
@@ -98,6 +98,28 @@ def test_openai_payload_uses_data_url_for_images():
     parts = payload["messages"][0]["content"]
     assert parts[0] == {"type": "text", "text": "hi"}
     assert parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_anthropic_omits_sampling_params_on_claude_5():
+    """Claude 5-series models reject `temperature` with a 400."""
+    msgs = [Message(role="user", text="hi")]
+    payload = AnthropicProvider()._build_payload("claude-opus-5", msgs, 256, 0.5)
+    assert "temperature" not in payload
+    # Thinking off keeps latency down and stops reasoning eating the token budget.
+    assert payload["thinking"] == {"type": "disabled"}
+
+
+def test_anthropic_keeps_temperature_on_models_that_accept_it():
+    msgs = [Message(role="user", text="hi")]
+    payload = AnthropicProvider()._build_payload("claude-haiku-4-5", msgs, 256, 0.5)
+    assert payload["temperature"] == 0.5
+    assert "thinking" not in payload
+
+
+def test_catalog_models_are_self_consistent():
+    """Each provider's default model must appear in its own model list."""
+    for provider in (AnthropicProvider(), OpenAIProvider(), GeminiProvider()):
+        assert provider.info.default_model in provider.info.models
 
 
 def test_gemini_maps_assistant_role_to_model():

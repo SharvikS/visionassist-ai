@@ -8,12 +8,14 @@ import { useVault } from "./vault-context";
 
 const SYSTEM_PROMPT =
   "You are VisionAssist, an assistant that can see the user's shared screen. " +
-  "Answer questions about what is currently visible clearly and concisely.";
+  "Answer questions about what is currently visible clearly and concisely. " +
+  "Do not include internal or system XML tags in your response.";
 
 const EMPTY_STATS: CaptureStats = {
   sampled: 0,
   dispatched: 0,
   evicted: 0,
+  dropped: 0,
   lastMse: 0,
   width: 0,
   height: 0,
@@ -88,6 +90,8 @@ export default function ScreenCapturePanel() {
       onFrame: (jpeg) => socketRef.current?.sendFrame(jpeg),
       onStats: (s) => setStats(s),
       onEnded: () => teardown(),
+      // Drop frames instead of queueing them when the socket is backed up.
+      canSend: () => socketRef.current?.canSendFrame ?? false,
     });
     captureRef.current = capture;
 
@@ -176,6 +180,7 @@ export default function ScreenCapturePanel() {
         {stats.width > 0 && (
           <p className="mt-2 text-center text-[11px] text-muted">
             {stats.width}×{stats.height} · last Δ MSE {stats.lastMse}
+            {stats.dropped > 0 && ` · ${stats.dropped} dropped (backpressure)`}
           </p>
         )}
       </div>
