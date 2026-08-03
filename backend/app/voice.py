@@ -18,6 +18,13 @@ _TTS_URL = "https://api.openai.com/v1/audio/speech"
 
 # Voices offered by the OpenAI speech endpoint.
 TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+
+#: Model allowlists. These names are forwarded verbatim to OpenAI, so they are
+#: constrained to a known set rather than passed through — an unrecognized value
+#: is a client bug worth a local 400, not an upstream round trip.
+STT_MODELS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+TTS_MODELS = ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"]
+
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_TTS_MODEL = "tts-1"
 DEFAULT_VOICE = "alloy"

@@ -131,3 +131,36 @@ def test_gemini_maps_assistant_role_to_model():
     payload = GeminiProvider()._build_payload(msgs, 256, 0.5)
     assert payload["systemInstruction"]["parts"][0]["text"] == "sys"
     assert [c["role"] for c in payload["contents"]] == ["user", "model"]
+
+
+def test_total_image_payload_is_bounded():
+    """Per-image limits multiply out to gigabytes; the aggregate cap is the real bound."""
+    from app.schemas import MAX_IMAGE_B64_CHARS
+
+    # Three images, each individually legal, that together exceed the total cap.
+    big = "A" * (MAX_IMAGE_B64_CHARS - 1)
+    r = client.post(
+        "/chat",
+        headers={"X-Provider-Key": "sk-test"},
+        json={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "text": "hi", "images": [big, big]},
+                {"role": "user", "text": "hi", "images": [big]},
+            ],
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_request_within_total_image_budget_is_accepted_by_schema():
+    """The aggregate cap must not reject an ordinary single-frame request."""
+    from app.schemas import ChatRequest
+
+    req = ChatRequest.model_validate({
+        "provider": "openai",
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "text": "what is this?", "images": ["QUJD"]}],
+    })
+    assert req.messages[0].images == ["QUJD"]

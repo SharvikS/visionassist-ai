@@ -24,12 +24,23 @@ from starlette.websockets import WebSocketState
 from ..config import get_settings
 from ..providers import ProviderError
 from ..router import get_router
-from ..schemas import MAX_IMAGE_B64_CHARS, ChatRequest, Message, Provider
+from ..schemas import (
+    MAX_IMAGE_B64_CHARS,
+    MAX_MODEL_CHARS,
+    MAX_TEXT_CHARS,
+    ChatRequest,
+    Message,
+    Provider,
+)
 
 logger = logging.getLogger("visionassist.ws")
 router = APIRouter(tags=["ws"])
 
 _KNOWN_PROVIDERS = set(get_args(Provider))
+
+#: Generous bound on a BYOK key. Real keys are ~100-200 chars; this only exists so a
+#: client can't park megabytes in per-connection memory by calling it a key.
+MAX_API_KEY_CHARS = 8_192
 
 
 class Session:
@@ -119,7 +130,13 @@ async def _dispatch(ws: WebSocket, session: Session, msg: dict[str, Any]) -> Non
             await _safe_send(ws, {"type": "status", "state": "frame_received"})
 
     elif mtype == "prompt":
-        await _handle_prompt(ws, session, str(msg.get("text", "")))
+        # `str(...)` on a non-string would happily stringify a dict into the prompt;
+        # reject the message instead of billing the user for `{'a': 1}`.
+        text = msg.get("text", "")
+        if not isinstance(text, str) or len(text) > MAX_TEXT_CHARS:
+            await _safe_send(ws, {"type": "error", "detail": "Invalid or oversized prompt."})
+            return
+        await _handle_prompt(ws, session, text)
 
     elif mtype == "cancel":
         await _cancel_and_wait(session)
@@ -129,12 +146,27 @@ async def _dispatch(ws: WebSocket, session: Session, msg: dict[str, Any]) -> Non
         await _safe_send(ws, {"type": "error", "detail": f"Unknown type '{mtype}'."})
 
 
+def _bounded_str(value: Any, max_chars: int) -> str | None:
+    """Accept only a non-empty string within `max_chars`; anything else becomes None.
+
+    The type check is load-bearing, not defensive noise. `provider` flows into a
+    `set` membership test a few lines later, and an unhashable value there (a JSON
+    object or array) raises `TypeError` — which would tear down the whole session
+    from a single crafted `init`. The others flow into upstream request headers.
+    """
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > max_chars:
+        return None
+    return value
+
+
 def _apply_init(session: Session, msg: dict[str, Any]) -> None:
-    session.provider = msg.get("provider")
-    session.model = msg.get("model")
-    session.api_key = msg.get("apiKey")
-    system = msg.get("system")
-    session.system = system if isinstance(system, str) else None
+    session.provider = _bounded_str(msg.get("provider"), 64)
+    session.model = _bounded_str(msg.get("model"), MAX_MODEL_CHARS)
+    session.api_key = _bounded_str(msg.get("apiKey"), MAX_API_KEY_CHARS)
+    session.system = _bounded_str(msg.get("system"), MAX_TEXT_CHARS)
 
 
 async def _safe_send(ws: WebSocket, payload: dict[str, Any]) -> bool:

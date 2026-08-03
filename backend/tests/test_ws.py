@@ -85,3 +85,80 @@ def test_ws_init_unknown_provider_errors():
         assert first["type"] == "error"
         status = ws.receive_json()
         assert status["state"] == "error"
+
+
+def test_ws_init_with_non_string_provider_does_not_kill_session():
+    """A JSON object where a provider string belongs must not tear down the session.
+
+    `provider` is tested against a `set`, and an unhashable value there raises
+    TypeError — which previously escaped to the connection-level handler and
+    closed the socket on a single crafted message.
+    """
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({
+            "type": "init",
+            "provider": {"nested": "object"},
+            "model": ["also", "wrong"],
+            "apiKey": 12345,
+        })
+        status = ws.receive_json()
+        assert status["type"] == "status"
+        assert status["state"] == "unconfigured"
+        # The session is still usable.
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+
+def test_ws_init_rejects_oversized_api_key():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({
+            "type": "init",
+            "provider": "openai",
+            "model": "gpt-4o",
+            "apiKey": "k" * 8_193,
+        })
+        # Key is discarded as out-of-bounds, so the session is not configured.
+        assert ws.receive_json()["state"] == "unconfigured"
+
+
+def test_ws_non_string_prompt_rejected():
+    """A dict prompt must not be stringified into a billable request."""
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({
+            "type": "init",
+            "provider": "openai",
+            "model": "gpt-4o",
+            "apiKey": "sk-test",
+        })
+        assert ws.receive_json()["state"] == "ready"
+        ws.send_json({"type": "prompt", "text": {"a": 1}})
+        assert ws.receive_json()["type"] == "error"
+
+
+def test_ws_oversized_prompt_rejected():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({
+            "type": "init",
+            "provider": "openai",
+            "model": "gpt-4o",
+            "apiKey": "sk-test",
+        })
+        ws.receive_json()
+        ws.send_json({"type": "prompt", "text": "x" * 100_001})
+        assert ws.receive_json()["type"] == "error"
+
+
+def test_ws_init_trims_whitespace_only_values_to_unconfigured():
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({
+            "type": "init",
+            "provider": "openai",
+            "model": "gpt-4o",
+            "apiKey": "   ",
+        })
+        assert ws.receive_json()["state"] == "unconfigured"
