@@ -8,6 +8,7 @@ request and are never persisted server-side.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,6 +24,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     host: str = "0.0.0.0"
     port: int = 8000
+
+    # -- logging ---------------------------------------------------------------
+    log_level: str = "INFO"
+    #: "text" for humans, "json" for log aggregators. Use json in deployed environments.
+    log_format: Literal["text", "json"] = "text"
 
     # -- upstream HTTP ---------------------------------------------------------
     provider_timeout: float = 60.0

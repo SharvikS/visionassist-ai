@@ -24,7 +24,11 @@ MAX_TOKENS_LIMIT = 32_768
 #: Ceiling on the *total* base64 image payload in one request. The per-image and
 #: per-message limits multiply out to gigabytes (100 messages x 8 images x 12 MB),
 #: so without an aggregate bound a single well-formed request could exhaust memory.
-MAX_TOTAL_IMAGE_CHARS = 24_000_000
+#:
+#: Deliberately below `Settings.max_body_bytes` so this is the constraint that actually
+#: binds image content, with the body-size middleware as the outer backstop. A capture
+#: frame is a few hundred KB, so ~12 MB decoded is still far more than any real request.
+MAX_TOTAL_IMAGE_CHARS = 16_000_000
 
 
 class Message(BaseModel):

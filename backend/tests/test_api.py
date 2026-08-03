@@ -134,11 +134,18 @@ def test_gemini_maps_assistant_role_to_model():
 
 
 def test_total_image_payload_is_bounded():
-    """Per-image limits multiply out to gigabytes; the aggregate cap is the real bound."""
-    from app.schemas import MAX_IMAGE_B64_CHARS
+    """Per-image limits multiply out to gigabytes; the aggregate cap is the real bound.
 
-    # Three images, each individually legal, that together exceed the total cap.
-    big = "A" * (MAX_IMAGE_B64_CHARS - 1)
+    Each image here is individually legal (under MAX_IMAGE_B64_CHARS) and the whole
+    body stays under the body-size middleware's limit, so this exercises the schema's
+    aggregate check specifically rather than the outer guard.
+    """
+    from app.schemas import MAX_IMAGE_B64_CHARS, MAX_TOTAL_IMAGE_CHARS
+
+    big = "A" * 9_000_000
+    assert len(big) < MAX_IMAGE_B64_CHARS, "each image must be individually legal"
+    assert 2 * len(big) > MAX_TOTAL_IMAGE_CHARS, "the pair must exceed the aggregate cap"
+
     r = client.post(
         "/chat",
         headers={"X-Provider-Key": "sk-test"},
@@ -146,12 +153,21 @@ def test_total_image_payload_is_bounded():
             "provider": "openai",
             "model": "gpt-4o",
             "messages": [
-                {"role": "user", "text": "hi", "images": [big, big]},
+                {"role": "user", "text": "hi", "images": [big]},
                 {"role": "user", "text": "hi", "images": [big]},
             ],
         },
     )
     assert r.status_code == 422
+
+
+def test_aggregate_image_cap_sits_below_the_body_limit():
+    """The aggregate cap is only meaningful if a request can reach it without
+    tripping the body-size middleware first."""
+    from app.config import get_settings
+    from app.schemas import MAX_TOTAL_IMAGE_CHARS
+
+    assert MAX_TOTAL_IMAGE_CHARS < get_settings().max_body_bytes
 
 
 def test_request_within_total_image_budget_is_accepted_by_schema():
