@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import defaultdict
 from typing import Any, get_args
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -23,6 +24,7 @@ from starlette.websockets import WebSocketState
 
 from ..config import get_settings
 from ..providers import ProviderError
+from ..rate_limit import client_key
 from ..router import get_router
 from ..schemas import (
     MAX_IMAGE_B64_CHARS,
@@ -60,11 +62,27 @@ class Session:
         return bool(self.provider and self.model and self.api_key)
 
 
+#: Live session count per client address. WebSocket connections never pass through the
+#: HTTP rate-limit middleware, so without this a client can open unbounded sockets —
+#: each pinning a generation task and an in-memory key.
+_active_sessions: dict[str, int] = defaultdict(int)
+
+
 @router.websocket("/ws/session")
 async def session_socket(ws: WebSocket) -> None:
+    settings = get_settings()
+    client_id = client_key(ws.scope, settings.trust_proxy_headers)
+
+    if _active_sessions[client_id] >= settings.max_ws_sessions_per_client:
+        # 1013 "try again later" — the client's reconnect backoff handles this
+        # correctly, where an outright refusal would look like a server outage.
+        await ws.close(code=1013, reason="Too many concurrent sessions.")
+        return
+
     await ws.accept()
+    _active_sessions[client_id] += 1
     session = Session()
-    idle_timeout = get_settings().ws_idle_timeout
+    idle_timeout = settings.ws_idle_timeout
     await _safe_send(ws, {"type": "status", "state": "connected"})
 
     try:
@@ -96,6 +114,11 @@ async def session_socket(ws: WebSocket) -> None:
         # Drop the key as soon as the socket is gone rather than waiting for GC.
         session.api_key = None
         session.latest_frame = None
+        # Release the slot, and drop the entry entirely at zero so the map doesn't
+        # retain one key per address that ever connected.
+        _active_sessions[client_id] -= 1
+        if _active_sessions[client_id] <= 0:
+            del _active_sessions[client_id]
 
 
 async def _dispatch(ws: WebSocket, session: Session, msg: dict[str, Any]) -> None:

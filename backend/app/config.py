@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,6 +57,29 @@ class Settings(BaseSettings):
     #: 4096 characters; matching it here turns a guaranteed upstream 400 into a
     #: cheap local one.
     max_tts_chars: int = 4096
+
+    # -- rate limiting ---------------------------------------------------------
+    #: Sustained requests/second allowed per client for the expensive endpoints.
+    rate_limit_rps: float = 2.0
+    #: Burst allowance. A session legitimately fires several requests on open, so a
+    #: pure sustained limit would reject normal use.
+    rate_limit_burst: int = 20
+    #: Set to false to disable limiting entirely (e.g. behind a gateway that does it).
+    rate_limit_enabled: bool = True
+    #: Trust `X-Forwarded-For` for client identity. Enable ONLY behind a proxy that
+    #: overwrites the header — any client can send it, so trusting it when directly
+    #: exposed lets a caller mint a new identity per request and bypass the limit.
+    trust_proxy_headers: bool = False
+    #: Concurrent WebSocket sessions allowed from one client address.
+    max_ws_sessions_per_client: int = 8
+
+    @field_validator("log_level")
+    @classmethod
+    def _valid_log_level(cls, v: str) -> str:
+        level = v.upper()
+        if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError(f"Invalid log level '{v}'.")
+        return level
 
     @property
     def cors_origin_list(self) -> list[str]:

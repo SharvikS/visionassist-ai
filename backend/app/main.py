@@ -13,11 +13,8 @@ from . import __version__
 from .config import get_settings
 from .http_client import aclose_client, get_client
 from .logging_config import configure_logging
-from .middleware import (
-    BodySizeLimitMiddleware,
-    RequestContextMiddleware,
-    request_id_ctx,
-)
+from .middleware import BodySizeLimitMiddleware, RequestContextMiddleware
+from .rate_limit import RateLimitMiddleware
 from .routes import chat, health, voice, ws
 
 settings = get_settings()
@@ -63,6 +60,18 @@ app.add_middleware(
     max_age=600,
 )
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
+
+if settings.rate_limit_enabled:
+    # Only the endpoints that fan out to a paid upstream. /health and /providers are
+    # cheap and static, and limiting health checks breaks orchestrator probes.
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate=settings.rate_limit_rps,
+        burst=settings.rate_limit_burst,
+        paths=("/chat", "/voice"),
+        trust_proxy=settings.trust_proxy_headers,
+    )
+
 app.add_middleware(RequestContextMiddleware)
 
 
