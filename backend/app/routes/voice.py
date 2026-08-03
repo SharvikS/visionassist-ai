@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -27,7 +30,7 @@ def _require_key(x_provider_key: str | None) -> str:
 
 
 @router.get("/voice/voices")
-async def voices() -> dict:
+async def voices() -> dict[str, Any]:
     return {
         "voices": voice_engine.TTS_VOICES,
         "default_voice": voice_engine.DEFAULT_VOICE,
@@ -63,7 +66,7 @@ async def speech_to_text(
     file: UploadFile = File(...),
     model: str = Form(voice_engine.DEFAULT_STT_MODEL),
     x_provider_key: str | None = Header(default=None),
-) -> dict:
+) -> dict[str, str]:
     key = _require_key(x_provider_key)
     if model not in voice_engine.STT_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown STT model '{model}'.")
@@ -107,7 +110,7 @@ async def text_to_speech(
     if req.model not in voice_engine.TTS_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown TTS model '{req.model}'.")
 
-    async def audio_stream():
+    async def audio_stream() -> AsyncIterator[bytes]:
         async for chunk in voice_engine.synthesize(
             api_key=key, text=req.text, voice=req.voice, model=req.model
         ):

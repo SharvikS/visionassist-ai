@@ -1,0 +1,68 @@
+[project]
+name = "visionassist-backend"
+version = "0.1.0"
+description = "VisionAssist AI — privacy-first BYOK multimodal orchestrator"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # import sorting
+    "B",        # bugbear — real bug patterns, not style
+    "C4",       # comprehension clarity
+    "UP",       # pyupgrade
+    "ASYNC",    # blocking calls inside async defs
+    "S",        # bandit security checks
+    "BLE",      # blind excepts must be justified, not incidental
+    "RUF",      # ruff's own rules
+]
+ignore = [
+    "S101",  # asserts are the point in tests
+    "B008",  # FastAPI's Depends()/File()/Form() defaults are the documented idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into private state deliberately (bucket maps, session counters) to
+# assert on internals that have no public accessor and shouldn't grow one.
+"tests/*" = ["S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+strict = true
+# Adapters are fully annotated; strict mode is enforced across the app package.
+disallow_untyped_defs = true
+warn_return_any = false
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Every async test in this suite is asyncio; naming the backend explicitly avoids
+# anyio parameterising each one across trio as well.
+addopts = "-q --strict-markers"
+markers = ["anyio: async test run under anyio"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

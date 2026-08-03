@@ -59,13 +59,13 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
     @model_validator(mode="after")
-    def _require_content(self) -> "ChatRequest":
+    def _require_content(self) -> ChatRequest:
         if not any(m.text.strip() or m.images for m in self.messages):
             raise ValueError("At least one message must contain text or an image.")
         return self
 
     @model_validator(mode="after")
-    def _bound_total_images(self) -> "ChatRequest":
+    def _bound_total_images(self) -> ChatRequest:
         total = sum(len(img) for m in self.messages for img in m.images)
         if total > MAX_TOTAL_IMAGE_CHARS:
             raise ValueError("Total image payload exceeds the maximum allowed size.")

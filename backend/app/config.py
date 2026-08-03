@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     )
 
     cors_origins: str = "http://localhost:3000"
-    host: str = "0.0.0.0"
+    #: Binds all interfaces because the normal deployment is a container, where
+    #: listening only on loopback makes the port unreachable from outside it.
+    #: Exposure is controlled by the network/ingress, not by this default.
+    host: str = "0.0.0.0"  # noqa: S104
     port: int = 8000
 
     # -- logging ---------------------------------------------------------------

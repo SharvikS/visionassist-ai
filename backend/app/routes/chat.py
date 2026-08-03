@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -63,7 +64,7 @@ async def chat_stream(
     key = _require_key(x_provider_key)
     router_ = get_router()
 
-    async def event_source():
+    async def event_source() -> AsyncIterator[str]:
         try:
             async for token in router_.stream_chat(req, api_key=key):
                 # JSON-encode each delta so embedded newlines don't break SSE framing.
@@ -72,7 +73,9 @@ async def chat_stream(
             # Status is already 200 by the time streaming starts, so upstream
             # failures have to be reported in-band as an SSE error event.
             yield f"event: error\ndata: {json.dumps(str(e))}\n\n"
-        except Exception:  # noqa: BLE001 — a stream must always terminate cleanly
+        # A stream must always terminate cleanly: the status line is long gone, so
+        # the only way to report a failure is in-band before the done event.
+        except Exception:
             logger.exception("Streaming generation failed")
             yield f"event: error\ndata: {json.dumps('Internal generation error.')}\n\n"
         yield "event: done\ndata: [DONE]\n\n"

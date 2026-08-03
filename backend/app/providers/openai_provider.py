@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 from ..schemas import ChatResponse, Message, ProviderInfo
 from .base import BaseProvider
@@ -25,11 +26,11 @@ class OpenAIProvider(BaseProvider):
 
     def _build_payload(
         self, model: str, messages: list[Message], max_tokens: int, temperature: float
-    ) -> dict:
-        wire: list[dict] = []
+    ) -> dict[str, Any]:
+        wire: list[dict[str, Any]] = []
         for m in messages:
             if m.images:
-                content: list[dict] = []
+                content: list[dict[str, Any]] = []
                 if m.text:
                     content.append({"type": "text", "text": m.text})
                 for img in m.images:
@@ -47,7 +48,10 @@ class OpenAIProvider(BaseProvider):
             "temperature": temperature,
         }
 
-    async def chat(self, *, api_key, model, messages, max_tokens, temperature) -> ChatResponse:
+    async def chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> ChatResponse:
         payload = self._build_payload(model, messages, max_tokens, temperature)
         client = self._client()
         resp = await client.post(_API_URL, headers=self._headers(api_key), json=payload)
@@ -60,7 +64,10 @@ class OpenAIProvider(BaseProvider):
             input_tokens=usage.get("prompt_tokens"), output_tokens=usage.get("completion_tokens"),
         )
 
-    async def stream_chat(self, *, api_key, model, messages, max_tokens, temperature) -> AsyncIterator[str]:
+    async def stream_chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> AsyncIterator[str]:
         payload = self._build_payload(model, messages, max_tokens, temperature)
         payload["stream"] = True
         client = self._client()

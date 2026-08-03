@@ -54,7 +54,7 @@ class Session:
         self.api_key: str | None = None
         self.system: str | None = None
         self.latest_frame: str | None = None  # base64 JPEG that survived eviction
-        self.task: asyncio.Task | None = None
+        self.task: asyncio.Task[None] | None = None
         self.frames_seen = 0
 
     @property
@@ -91,7 +91,7 @@ async def session_socket(ws: WebSocket) -> None:
                 # An abandoned tab would otherwise hold the connection — and the
                 # in-memory API key — open forever.
                 msg = await asyncio.wait_for(ws.receive_json(), timeout=idle_timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await _safe_send(ws, {"type": "status", "state": "idle_timeout"})
                 break
             except (ValueError, TypeError):
@@ -107,7 +107,9 @@ async def session_socket(ws: WebSocket) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception:  # noqa: BLE001 — last-resort guard so one bad message can't leak a task
+    # Last-resort guard: without it one bad message could escape and leave the
+    # session's generation task orphaned instead of running the cleanup below.
+    except Exception:
         logger.exception("Unexpected error in WebSocket session")
     finally:
         await _cancel_and_wait(session)
@@ -219,8 +221,12 @@ async def _cancel_and_wait(session: Session) -> bool:
     task.cancel()
     try:
         await task
-    except (asyncio.CancelledError, Exception):  # noqa: BLE001 — teardown path
-        pass
+    except asyncio.CancelledError:
+        pass  # the expected outcome of cancelling — not worth a log line
+    except Exception:
+        # A provider adapter raising while unwinding must not break teardown, but
+        # it is worth a line when someone is debugging a stuck barge-in.
+        logger.debug("Generation raised while being cancelled", exc_info=True)
     return True
 
 
@@ -240,17 +246,24 @@ async def _handle_prompt(ws: WebSocket, session: Session, text: str) -> None:
         await _safe_send(ws, {"type": "error", "detail": "Prompt must contain text or a frame."})
         return
 
+    # Bind the key now rather than reading `session.api_key` inside the task. The task
+    # runs after this handler returns, and by then a re-`init` could have swapped the
+    # key — or teardown could have cleared it to None — under a generation already in
+    # flight. `configured` above guarantees it is set at this point.
+    api_key = session.api_key
+    assert api_key is not None  # narrowed by the `configured` check above
+
     async def run() -> None:
         if not await _safe_send(ws, {"type": "status", "state": "generating"}):
             return
         try:
-            async for token in get_router().stream_chat(req, api_key=session.api_key):
+            async for token in get_router().stream_chat(req, api_key=api_key):
                 if not await _safe_send(ws, {"type": "token", "text": token}):
                     return  # peer disconnected mid-stream
             await _safe_send(ws, {"type": "done"})
         except ProviderError as e:
             await _safe_send(ws, {"type": "error", "detail": str(e)})
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Generation failed")
             await _safe_send(ws, {"type": "error", "detail": "Internal generation error."})
 

@@ -17,7 +17,7 @@ from .providers import (
     OpenAIProvider,
     ProviderError,
 )
-from .schemas import ChatRequest, ChatResponse, Message, ProviderInfo
+from .schemas import ChatRequest, ChatResponse, ProviderInfo
 
 
 class ModelRouter:

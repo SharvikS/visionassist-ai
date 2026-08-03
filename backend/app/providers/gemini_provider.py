@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 from ..schemas import ChatResponse, Message, ProviderInfo
 from .base import BaseProvider
@@ -33,22 +34,22 @@ class GeminiProvider(BaseProvider):
 
     def _build_payload(
         self, messages: list[Message], max_tokens: int, temperature: float
-    ) -> dict:
-        contents: list[dict] = []
+    ) -> dict[str, Any]:
+        contents: list[dict[str, Any]] = []
         system_parts: list[str] = []
         for m in messages:
             if m.role == "system":
                 if m.text:
                     system_parts.append(m.text)
                 continue
-            parts: list[dict] = []
+            parts: list[dict[str, Any]] = []
             if m.text:
                 parts.append({"text": m.text})
             for img in m.images:
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img}})
             contents.append({"role": self._role(m.role), "parts": parts or [{"text": ""}]})
 
-        payload: dict = {
+        payload: dict[str, Any] = {
             "contents": contents,
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
         }
@@ -57,14 +58,17 @@ class GeminiProvider(BaseProvider):
         return payload
 
     @staticmethod
-    def _extract_text(data: dict) -> str:
+    def _extract_text(data: dict[str, Any]) -> str:
         candidates = data.get("candidates") or []
         if not candidates:
             return ""
         parts = candidates[0].get("content", {}).get("parts", [])
         return "".join(p.get("text", "") for p in parts)
 
-    async def chat(self, *, api_key, model, messages, max_tokens, temperature) -> ChatResponse:
+    async def chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> ChatResponse:
         payload = self._build_payload(messages, max_tokens, temperature)
         url = f"{_BASE}/{model}:generateContent"
         client = self._client()
@@ -78,7 +82,10 @@ class GeminiProvider(BaseProvider):
             output_tokens=usage.get("candidatesTokenCount"),
         )
 
-    async def stream_chat(self, *, api_key, model, messages, max_tokens, temperature) -> AsyncIterator[str]:
+    async def stream_chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> AsyncIterator[str]:
         payload = self._build_payload(messages, max_tokens, temperature)
         url = f"{_BASE}/{model}:streamGenerateContent?alt=sse"
         client = self._client()

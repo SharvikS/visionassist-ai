@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 from ..schemas import ChatResponse, Message, ProviderInfo
 from .base import BaseProvider
@@ -50,15 +51,15 @@ class AnthropicProvider(BaseProvider):
 
     def _build_payload(
         self, model: str, messages: list[Message], max_tokens: int, temperature: float
-    ) -> dict:
+    ) -> dict[str, Any]:
         system_parts: list[str] = []
-        wire_messages: list[dict] = []
+        wire_messages: list[dict[str, Any]] = []
         for m in messages:
             if m.role == "system":
                 if m.text:
                     system_parts.append(m.text)
                 continue
-            content: list[dict] = []
+            content: list[dict[str, Any]] = []
             for img in m.images:
                 content.append({
                     "type": "image",
@@ -66,9 +67,11 @@ class AnthropicProvider(BaseProvider):
                 })
             if m.text:
                 content.append({"type": "text", "text": m.text})
-            wire_messages.append({"role": m.role, "content": content or [{"type": "text", "text": ""}]})
+            wire_messages.append(
+                {"role": m.role, "content": content or [{"type": "text", "text": ""}]}
+            )
 
-        payload: dict = {
+        payload: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
             "messages": wire_messages,
@@ -81,14 +84,19 @@ class AnthropicProvider(BaseProvider):
             payload["system"] = "\n\n".join(system_parts)
         return payload
 
-    async def chat(self, *, api_key, model, messages, max_tokens, temperature) -> ChatResponse:
+    async def chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> ChatResponse:
         payload = self._build_payload(model, messages, max_tokens, temperature)
         client = self._client()
         resp = await client.post(_API_URL, headers=self._headers(api_key), json=payload)
         self._raise_for_upstream(resp)
         data = resp.json()
         text = "".join(
-            block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
+            block.get("text", "")
+            for block in data.get("content", [])
+            if block.get("type") == "text"
         )
         usage = data.get("usage", {})
         return ChatResponse(
@@ -96,7 +104,10 @@ class AnthropicProvider(BaseProvider):
             input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
         )
 
-    async def stream_chat(self, *, api_key, model, messages, max_tokens, temperature) -> AsyncIterator[str]:
+    async def stream_chat(
+        self, *, api_key: str, model: str, messages: list[Message],
+        max_tokens: int, temperature: float,
+    ) -> AsyncIterator[str]:
         payload = self._build_payload(model, messages, max_tokens, temperature)
         payload["stream"] = True
         client = self._client()

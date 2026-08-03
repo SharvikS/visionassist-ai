@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -23,7 +24,7 @@ logger = logging.getLogger("visionassist")
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Build the pooled upstream client up front so the first user request
     # doesn't pay client construction on top of its TLS handshake.
     get_client()
@@ -99,7 +100,7 @@ app.include_router(ws.router)
 
 
 @app.get("/", tags=["health"])
-async def root() -> dict:
+async def root() -> dict[str, str]:
     return {
         "service": "VisionAssist AI",
         "version": __version__,
