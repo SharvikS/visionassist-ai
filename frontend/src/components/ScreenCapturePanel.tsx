@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MonitorPlay, MonitorStop, Send, Square } from "lucide-react";
 import { ScreenCapture, type CaptureStats } from "@/lib/capture";
 import { SessionSocket } from "@/lib/ws";
+import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
 const SYSTEM_PROMPT =
@@ -27,6 +28,7 @@ const EMPTY_STATS: CaptureStats = {
  */
 export default function ScreenCapturePanel() {
   const { activeProvider, activeModel, getKey } = useVault();
+  const { record } = useUsage();
   const [capturing, setCapturing] = useState(false);
   const [stats, setStats] = useState<CaptureStats>(EMPTY_STATS);
   const [wsState, setWsState] = useState("idle");
@@ -34,6 +36,11 @@ export default function ScreenCapturePanel() {
   const [answer, setAnswer] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Mirrors of the in-flight exchange. The socket handlers below outlive any given
+  // render, so they can't read the state values.
+  const askedRef = useRef("");
+  const answerRef = useRef("");
 
   const captureRef = useRef<ScreenCapture | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
@@ -73,8 +80,19 @@ export default function ScreenCapturePanel() {
         if (state === "generating") setGenerating(true);
         if (state === "interrupted" || state === "cancelled") setGenerating(false);
       },
-      onToken: (t) => setAnswer((a) => a + t),
-      onDone: () => setGenerating(false),
+      onToken: (t) => {
+        answerRef.current += t;
+        setAnswer((a) => a + t);
+      },
+      onDone: () => {
+        setGenerating(false);
+        // One frame per prompt: the server keeps only the latest surviving frame.
+        record({
+          promptText: askedRef.current,
+          responseText: answerRef.current,
+          frames: 1,
+        });
+      },
       onError: (detail) => {
         setError(detail);
         setGenerating(false);
@@ -116,6 +134,8 @@ export default function ScreenCapturePanel() {
     setAnswer("");
     setPrompt("");
     setGenerating(true);
+    askedRef.current = text;
+    answerRef.current = "";
     socketRef.current?.sendPrompt(text);
   }
 

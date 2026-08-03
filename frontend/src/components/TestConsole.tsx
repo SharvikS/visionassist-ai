@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, Square } from "lucide-react";
 import { streamChat, type ChatMessage } from "@/lib/api";
+import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
 interface Turn {
@@ -16,6 +17,7 @@ interface Turn {
  */
 export default function TestConsole() {
   const { activeProvider, activeModel, configured, getKey } = useVault();
+  const { record } = useUsage();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,11 +58,16 @@ export default function TestConsole() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Accumulated locally as well as into state: `turns` is stale inside this
+    // closure, and usage must be recorded even when the stream is aborted midway.
+    let answer = "";
+
     try {
       await streamChat(
         { provider: activeProvider, model: activeModel, messages: history },
         key,
         (delta) => {
+          answer += delta;
           setTurns((prev) => {
             const next = [...prev];
             next[next.length - 1] = {
@@ -77,6 +84,12 @@ export default function TestConsole() {
         setError(err instanceof Error ? err.message : "Request failed.");
       }
     } finally {
+      // Billed whether or not the stream ran to completion — an aborted
+      // generation still consumed upstream tokens.
+      record({
+        promptText: history.map((m) => m.text).join("\n"),
+        responseText: answer,
+      });
       setBusy(false);
       abortRef.current = null;
     }

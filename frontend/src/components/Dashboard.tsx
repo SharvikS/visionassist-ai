@@ -14,6 +14,7 @@ import ApiKeyModal from "./ApiKeyModal";
 import ModelSwitcher from "./ModelSwitcher";
 import ScreenCapturePanel from "./ScreenCapturePanel";
 import TestConsole from "./TestConsole";
+import UsageOverlay from "./UsageOverlay";
 import VoicePanel from "./VoicePanel";
 import { useVault } from "./vault-context";
 
@@ -74,6 +75,8 @@ export default function Dashboard() {
               {configured.length} set
             </span>
           </button>
+
+          <UsageOverlay />
         </div>
 
         <div className="border-t border-border p-5">

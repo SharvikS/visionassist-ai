@@ -6,6 +6,7 @@ import { SessionSocket } from "@/lib/ws";
 import { VoiceSession } from "@/lib/voice-session";
 import { SpeechQueue } from "@/lib/speech-queue";
 import { synthesize, transcribe } from "@/lib/voice-api";
+import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
 const SYSTEM_PROMPT =
@@ -23,6 +24,7 @@ type VoiceState = "idle" | "listening" | "thinking" | "speaking";
  */
 export default function VoicePanel() {
   const { activeProvider, activeModel, configured, getKey } = useVault();
+  const { record } = useUsage();
   const [state, setState] = useState<VoiceState>("idle");
   const [active, setActive] = useState(false);
   const [level, setLevel] = useState(0);
@@ -37,6 +39,7 @@ export default function VoicePanel() {
   const openaiKeyRef = useRef<string | null>(null);
   const voiceNameRef = useRef(voice);
   const answerRef = useRef("");
+  const transcriptRef = useRef("");
   const stateRef = useRef<VoiceState>("idle");
 
   const hasOpenAiKey = configured.includes("openai");
@@ -103,6 +106,7 @@ export default function VoicePanel() {
       },
       onDone: () => {
         if (stateRef.current !== "listening") speech.flush();
+        record({ promptText: transcriptRef.current, responseText: answerRef.current });
       },
       onError: (detail) => setError(detail),
       onClose: () => {},
@@ -129,6 +133,7 @@ export default function VoicePanel() {
             return;
           }
           setTranscript(text);
+          transcriptRef.current = text;
           answerRef.current = "";
           setAnswer("");
           socketRef.current?.sendPrompt(text);

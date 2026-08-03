@@ -3,6 +3,7 @@
 import Dashboard from "./Dashboard";
 import ErrorBoundary from "./ErrorBoundary";
 import VaultGate from "./VaultGate";
+import { UsageProvider } from "./usage-context";
 import { useVault, VaultProvider } from "./vault-context";
 
 function Gate() {
@@ -22,7 +23,9 @@ export default function AppRoot() {
   return (
     <ErrorBoundary>
       <VaultProvider>
-        <Gate />
+        <UsageProvider>
+          <Gate />
+        </UsageProvider>
       </VaultProvider>
     </ErrorBoundary>
   );
