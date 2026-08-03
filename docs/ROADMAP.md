@@ -3,12 +3,12 @@
 Small, incremental milestones. Each ships behind a clean interface so later milestones can
 build on it without rework.
 
-## Milestone 1 — Core Platform Setup & BYOK Infrastructure
-- [ ] Next.js UI with dark-mode dashboard shell
-- [ ] API Key Configuration Modal
-- [ ] Client-side Web Crypto (AES-GCM) encryption vault in `localStorage`
-- [ ] FastAPI backend skeleton (health, config)
-- [ ] Model router to test provider responses (OpenAI, Anthropic, Gemini)
+## Milestone 1 — Core Platform Setup & BYOK Infrastructure ✅
+- [x] Next.js UI with dark-mode dashboard shell
+- [x] API Key Configuration Modal
+- [x] Client-side Web Crypto (AES-GCM) encryption vault in `localStorage`
+- [x] FastAPI backend skeleton (health, config)
+- [x] Model router to test provider responses (OpenAI, Anthropic, Gemini)
 
 ## Milestone 2 — Streaming Pipeline & Screen Capture ✅
 - [x] `navigator.mediaDevices.getDisplayMedia()` capture
@@ -29,7 +29,13 @@ build on it without rework.
 - [ ] Playwright runner (web automation)
 - [ ] WebSocket bridge for local OS desktop actions (PyAutoGUI daemon)
 
-## Milestone 5 — Polishing, Rate-Limiting & Deployment
-- [ ] Client-side usage & token-cost tracking overlay
-- [ ] Confirmation modal for high-risk autonomous actions
-- [ ] Dockerize; deploy frontend (Vercel) + backend (Railway/Fly.io)
+## Milestone 5 — Polishing, Rate-Limiting & Deployment ✅
+- [x] Client-side usage & token-cost tracking overlay
+- [x] Server-side rate limiting (token bucket) + WebSocket concurrency caps
+- [x] Strict Content-Security-Policy, HSTS, and the rest of the security headers
+- [x] Request correlation IDs and structured (JSON) logging
+- [x] Dockerize both services; `docker compose` for the full stack
+- [x] CI: lint, strict type-checking, both test suites, build, Docker smoke test
+- [ ] Confirmation modal for high-risk autonomous actions — deferred to M4, which is
+      what introduces the autonomous actions there would be anything to confirm
+- [ ] Hosted deployment (Vercel + Railway/Fly.io) — images are ready; not yet deployed

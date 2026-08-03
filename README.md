@@ -39,7 +39,7 @@ Your keys are AES-256-GCM encrypted in the browser and sent only on active reque
 
 ## Status
 
-Milestones 1–3 are complete and working end to end. Milestones 4–5 are not built yet.
+Milestones 1–3 and 5 are complete and working end to end. Milestone 4 is not built.
 
 | | Milestone | State |
 |---|---|---|
@@ -47,9 +47,14 @@ Milestones 1–3 are complete and working end to end. Milestones 4–5 are not b
 | ✅ | **M2** — Streaming pipeline & screen capture | `getDisplayMedia`, canvas sampling, frame eviction, WebSocket |
 | ✅ | **M3** — Voice & interruption | Web Audio VAD, Whisper STT, pipelined TTS, barge-in |
 | ⬜ | **M4** — On-screen automation | Action schema, coordinate mapper, Playwright runner |
-| ⬜ | **M5** — Polish, rate limiting & deploy | Cost overlay, confirmation modals, Docker, hosting |
+| ✅ | **M5** — Polish, rate limiting & deploy | Cost overlay, rate limiting, strict CSP, Docker, CI |
 
 The dashboard shows M4 as a placeholder panel. Anything below is real unless marked otherwise.
+
+**Quality gates.** 85 backend tests (85% coverage) and 100 frontend tests, with ruff,
+strict mypy, eslint, and `tsc --noEmit` all clean. CI runs the lot on every push, plus a
+Docker build that curls `/health` against a running container. Neither test suite touches
+the network.
 
 ---
 
@@ -87,8 +92,18 @@ If the backend isn't on `http://localhost:8000`, set `NEXT_PUBLIC_API_URL` in
 4. **Start voice** to talk instead. Voice needs an OpenAI key for STT and TTS regardless of
    which model answers.
 
-On macOS and Linux, `make install`, `make backend`, `make frontend`, and `make test` wrap
-these steps.
+`make install`, `make backend`, `make frontend`, and `make test` wrap these steps on
+macOS, Linux, and Windows alike — the Makefile detects the platform's venv layout.
+
+### Or: the whole stack in containers
+
+```bash
+docker compose up --build     # frontend :3000, backend :8000
+```
+
+Both images are multi-stage and run as a non-root user. `NEXT_PUBLIC_API_URL` is a
+**build** arg, not a runtime one — Next inlines it into the client bundle — so it must be
+a URL the browser can reach, not the compose service name.
 
 ---
 
@@ -147,6 +162,7 @@ choices here are load-bearing. If you change them, change them deliberately.
 | **Interrupt correctness** | Generations are cancelled with `await` (`_cancel_and_wait`). `Task.cancel()` only *requests* cancellation, so without the await a barge-in can interleave two answers on one socket. |
 | **Socket chatter** | Frames are acknowledged once per session, not per frame. At 10 FPS, per-frame acks were 10 wasted round trips a second. |
 | **Abandoned sessions** | Idle WebSocket sessions close after `VA_WS_IDLE_TIMEOUT`, releasing the connection and the in-memory key. |
+| **Middleware choice** | Request context, body limits, and rate limiting are raw ASGI, not `BaseHTTPMiddleware`. The latter buffers responses through a memory stream, which would turn SSE token deltas and TTS audio back into one blob. |
 
 ### Frontend
 
@@ -193,28 +209,54 @@ product and thinking tokens would otherwise share the `max_tokens` budget with t
 | `VA_MAX_KEEPALIVE_CONNECTIONS` | `20` | Warm connections kept between requests. |
 | `VA_KEEPALIVE_EXPIRY` | `60.0` | Seconds an idle pooled connection is retained. |
 | `VA_WS_IDLE_TIMEOUT` | `300.0` | Close silent WebSocket sessions. |
+| `VA_LOG_LEVEL` | `INFO` | Log verbosity. |
+| `VA_LOG_FORMAT` | `text` | `text` for humans, `json` for log aggregators. |
+| `VA_MAX_BODY_BYTES` | `25165824` | Ceiling on a request body, enforced before buffering. |
+| `VA_MAX_AUDIO_BYTES` | `26214400` | Largest STT upload (matches OpenAI's Whisper limit). |
+| `VA_MAX_TTS_CHARS` | `4096` | Longest text accepted for synthesis. |
+| `VA_RATE_LIMIT_ENABLED` | `true` | Token-bucket limiting on `/chat` and `/voice`. |
+| `VA_RATE_LIMIT_RPS` | `2` | Sustained requests/second per client. |
+| `VA_RATE_LIMIT_BURST` | `20` | Burst allowance. |
+| `VA_MAX_WS_SESSIONS_PER_CLIENT` | `8` | Concurrent WebSocket sessions per client. |
+| `VA_TRUST_PROXY_HEADERS` | `false` | Honour `X-Forwarded-For`. Enable **only** behind a proxy that overwrites it. |
 
 No provider keys go here. See `backend/.env.example`.
+
+Rate limiting is in-process. Behind multiple replicas each process enforces its own
+bucket, so the effective limit multiplies by the replica count — limit at the load
+balancer, or move the buckets to Redis, if that matters to you.
 
 ### Frontend (`frontend/.env.local`)
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend origin (the WebSocket URL is derived from it). |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend origin. The WebSocket URL and the CSP `connect-src` allowlist are both derived from it — it is inlined at **build** time, so changing it requires a rebuild. |
 
 ---
 
 ## Testing
 
 ```bash
-cd backend  && pytest        # API, WS control plane, provider payloads, HTTP pooling
-cd frontend && npm run lint && npm run build
+make test          # everything CI runs: lint, types, both suites, build
+
+# or individually
+cd backend  && pytest --cov          # 85 tests, 85% coverage
+cd frontend && npm test              # 100 tests
+cd frontend && npm run typecheck     # tsc --noEmit
 ```
 
-`make test` runs all three.
+**Backend** — payload shaping, input validation, the WebSocket control plane, rate
+limiting, request/body middleware, connection pooling, and the provider SSE parsers
+(against a mock transport). The error-redaction tests assert that a rejected API key never
+appears in a surfaced error, on both the buffered and streaming paths.
 
-Tests cover payload shaping, input validation, WebSocket protocol behaviour, and the pooled
-client — none of them make live provider calls, so no API key is needed.
+**Frontend** — the framework-free libraries: frame eviction, the AES-GCM vault, the speech
+queue's barge-in path, WebSocket reconnect/backpressure, and cost estimation. Vault tests
+assert that neither a plaintext key nor the passphrase ever reaches `localStorage`.
+
+Neither suite makes a network call, so no API key is needed and the whole thing runs in
+seconds. `ruff check`, `mypy` (strict), `eslint`, and `tsc --noEmit` are all clean and
+enforced in CI.
 
 ---
 
@@ -229,9 +271,17 @@ client — none of them make live provider calls, so no API key is needed.
   land in proxy or access logs.
 - Upstream `401`/`403` bodies are replaced with a fixed message rather than echoed, since
   providers sometimes quote the rejected credential back.
-- Inbound payloads are size- and shape-limited at the edge (`app/schemas.py`).
-- Security headers are set in `next.config.ts`. A strict CSP is deliberately deferred to M5,
-  where the deployed API origin is known.
+- Inbound payloads are size- and shape-limited at the edge (`app/schemas.py`), and request
+  bodies are bounded *before* being buffered — Pydantic can only reject an oversized
+  payload after Starlette has already read all of it into memory.
+- A strict **Content-Security-Policy** is set in `next.config.ts`. `connect-src` is pinned
+  to the single backend origin (plus its `ws`/`wss` form), so a compromised dependency
+  cannot exfiltrate a decrypted API key to an arbitrary host.
+- **Rate limiting** (token bucket, per client) fronts every endpoint that proxies a paid
+  upstream call, and WebSocket sessions have their own concurrency cap since socket
+  upgrades never traverse HTTP middleware.
+- Every request carries an `X-Request-ID`, echoed on the response and attached to each log
+  line, so a reported failure maps to an exact traceback.
 
 **Run this over TLS in production.** Keys travel in request headers and WebSocket frames;
 plain HTTP exposes them on the wire.
@@ -241,9 +291,9 @@ plain HTTP exposes them on the wire.
 ## Roadmap
 
 - **M4 — On-screen automation.** JSON action schema, normalized→pixel coordinate mapper,
-  Playwright runner, and an approval queue for high-risk actions.
-- **M5 — Polish & deploy.** Live cost overlay, confirmation modals, rate limiting, strict
-  CSP, Docker images, and hosted deployment.
+  Playwright runner, and an approval queue for high-risk actions. Not started — this is the
+  one milestone still outstanding, and the confirmation-modal work is scoped with it since
+  there are no autonomous actions to confirm until the runner exists.
 
 Details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -253,10 +303,14 @@ Details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ```
 visionassist-ai/
-├── frontend/     # Next.js 16 dashboard (vault, capture, voice, streaming client)
-├── backend/      # FastAPI orchestrator (router, providers, voice, WebSocket)
-├── docs/         # architecture + roadmap
-└── Makefile      # install / run / test shortcuts (macOS + Linux)
+├── frontend/           # Next.js 16 dashboard (vault, capture, voice, cost overlay)
+│   └── Dockerfile      # multi-stage, standalone output, non-root
+├── backend/            # FastAPI orchestrator (router, providers, voice, WebSocket)
+│   └── Dockerfile      # multi-stage, venv-only runtime, non-root
+├── docs/               # architecture + roadmap
+├── .github/workflows/  # CI: lint, types, tests, build, Docker smoke test
+├── docker-compose.yml  # full stack, healthchecked
+└── Makefile            # install / run / test / docker shortcuts (all platforms)
 ```
 
 ## License
