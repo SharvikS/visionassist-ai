@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     #: Concurrent WebSocket sessions allowed from one client address.
     max_ws_sessions_per_client: int = 8
 
+    # -- on-screen automation (M4) ---------------------------------------------
+    #: Off by default. This is the only part of the service that *acts* rather than
+    #: answers, so it does not enable itself — an operator has to opt in.
+    automation_enabled: bool = False
+    #: Run the automation browser headless. Set false to watch a plan execute locally.
+    automation_headless: bool = True
+
     @field_validator("log_level")
     @classmethod
     def _valid_log_level(cls, v: str) -> str:

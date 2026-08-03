@@ -16,7 +16,7 @@ from .http_client import aclose_client, get_client
 from .logging_config import configure_logging
 from .middleware import BodySizeLimitMiddleware, RequestContextMiddleware
 from .rate_limit import RateLimitMiddleware
-from .routes import chat, health, voice, ws
+from .routes import automation, chat, health, voice, ws
 
 settings = get_settings()
 configure_logging(level=settings.log_level, fmt=settings.log_format)
@@ -69,7 +69,7 @@ if settings.rate_limit_enabled:
         RateLimitMiddleware,
         rate=settings.rate_limit_rps,
         burst=settings.rate_limit_burst,
-        paths=("/chat", "/voice"),
+        paths=("/chat", "/voice", "/automation"),
         trust_proxy=settings.trust_proxy_headers,
     )
 
@@ -97,6 +97,7 @@ app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(voice.router)
 app.include_router(ws.router)
+app.include_router(automation.router)
 
 
 @app.get("/", tags=["health"])

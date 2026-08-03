@@ -1,0 +1,10 @@
+# Optional: on-screen automation (M4).
+#
+# Kept out of requirements.txt because the browser binaries dwarf the rest of the
+# image, and most deployments never automate anything. The automation endpoints
+# return 503 when this isn't installed rather than failing at startup.
+#
+#   pip install -r requirements-automation.txt
+#   python -m playwright install chromium
+-r requirements.txt
+playwright>=1.48
