@@ -39,22 +39,22 @@ Your keys are AES-256-GCM encrypted in the browser and sent only on active reque
 
 ## Status
 
-Milestones 1–3 and 5 are complete and working end to end. Milestone 4 is not built.
+All five milestones are complete and working end to end.
 
 | | Milestone | State |
 |---|---|---|
 | ✅ | **M1** — Core platform & BYOK vault | Dashboard, Web Crypto vault, model router |
 | ✅ | **M2** — Streaming pipeline & screen capture | `getDisplayMedia`, canvas sampling, frame eviction, WebSocket |
 | ✅ | **M3** — Voice & interruption | Web Audio VAD, Whisper STT, pipelined TTS, barge-in |
-| ⬜ | **M4** — On-screen automation | Action schema, coordinate mapper, Playwright runner |
+| ✅ | **M4** — On-screen automation | Action schema, coordinate mapper, Playwright runner, approval queue |
 | ✅ | **M5** — Polish, rate limiting & deploy | Cost overlay, rate limiting, strict CSP, Docker, CI |
 
-The dashboard shows M4 as a placeholder panel. Anything below is real unless marked otherwise.
-
-**Quality gates.** 85 backend tests (85% coverage) and 100 frontend tests, with ruff,
+**Quality gates.** 156 backend tests (85% coverage) and 111 frontend tests, with ruff,
 strict mypy, eslint, and `tsc --noEmit` all clean. CI runs the lot on every push, plus a
 Docker build that curls `/health` against a running container. Neither test suite touches
 the network.
+
+**On-screen automation is off by default** and web-only. See [Automation](#on-screen-automation-m4).
 
 ---
 
@@ -145,6 +145,67 @@ WebSocket → each finished sentence is synthesized and played while the next on
 generating. Speaking at any point cancels the in-flight generation and stops playback.
 
 Full message contract: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+## On-screen automation (M4)
+
+Off unless `VA_AUTOMATION_ENABLED=true`. It is the only part of the service that *acts*
+rather than answers, so it does not enable itself.
+
+### The boundary
+
+Actions run in a **Playwright browser this backend owns**. There is deliberately no
+OS-level input path — no desktop daemon, no synthetic global mouse or keyboard events.
+A model that has been prompt-injected by a hostile page can, at worst, drive the same
+browser that is already showing it that page. Adding a desktop daemon would move the
+blast radius from one browser tab to everything the user's account can do, and no
+approval UI meaningfully compensates for that once a plan is approved.
+
+### The flow
+
+```
+POST /automation/plan       model proposes  →  nothing runs
+        ↓  human reads the plan, action by action
+POST /automation/execute    approved: true  →  runs in a fresh browser context
+```
+
+Splitting these is the gate. `/plan` has no side effects at all (a test asserts it never
+launches a browser), so the model's output stays inert until a person has read it.
+
+### What bounds a plan
+
+The producer is a model reading a screenshot that may have been authored by someone
+hostile, so these are a security boundary, not input hygiene:
+
+| Bound | Why |
+|---|---|
+| URL schemes allowlisted to http/https | `javascript:` is script execution; `file:` and `data:` read local or attacker-supplied content; the rest are OS handlers that launch other applications. |
+| Keys allowlisted, not blocklisted | So a browser or OS shortcut can't be reached by omission. |
+| 12 actions per plan | A 40-step plan is unreviewable, which defeats the gate it has to pass. |
+| Re-validated at execute | Approval doesn't bypass the schema — an approved `javascript:` navigation is still rejected. |
+| Fresh browser context per plan | No cookies or storage carry between runs. |
+| Stops at first failure | Later actions were planned against a page state the failed one was meant to produce. |
+
+The planning prompt states that page text is content, not instructions, and tells the
+model to report rather than obey anything that looks like a command.
+
+Coordinates are normalized `[0,1]`, never pixels: the model sees a screenshot downscaled
+to a 1536px long edge, and normalized values are invariant to both that downscale and
+device pixel ratio — so the mapping stays correct without the model knowing either, and
+without a scale factor that can drift out of sync with the capture settings.
+
+### Enabling it
+
+Playwright is an optional dependency; the browser binaries dwarf the rest of the image,
+so the endpoints return a clear 503 rather than failing at startup when it's absent.
+
+```bash
+cd backend
+pip install -r requirements-automation.txt
+python -m playwright install chromium
+VA_AUTOMATION_ENABLED=true uvicorn app.main:app --port 8000
+```
 
 ---
 

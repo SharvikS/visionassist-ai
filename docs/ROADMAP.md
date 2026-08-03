@@ -23,11 +23,15 @@ build on it without rework.
 - [x] Server-side STT/TTS pipeline (Whisper + OpenAI speech, BYOK)
 - [x] Interrupt handler: speech onset cancels generation + purges TTS playback (barge-in)
 
-## Milestone 4 — On-Screen Automation & Action Execution
-- [ ] JSON action payload prompting template
-- [ ] Normalized → pixel coordinate mapper
-- [ ] Playwright runner (web automation)
-- [ ] WebSocket bridge for local OS desktop actions (PyAutoGUI daemon)
+## Milestone 4 — On-Screen Automation & Action Execution ✅
+- [x] JSON action payload prompting template
+- [x] Normalized → pixel coordinate mapper
+- [x] Playwright runner (web automation)
+- [x] Approval queue — every plan reviewed action-by-action before it runs
+- [ ] ~~WebSocket bridge for local OS desktop actions (PyAutoGUI daemon)~~ —
+      **dropped deliberately.** It moves the blast radius from one browser tab to
+      everything the user's account can do, and approval doesn't compensate for that.
+      Automation is web-only by design; see the Automation section of the README.
 
 ## Milestone 5 — Polishing, Rate-Limiting & Deployment ✅
 - [x] Client-side usage & token-cost tracking overlay
@@ -36,6 +40,6 @@ build on it without rework.
 - [x] Request correlation IDs and structured (JSON) logging
 - [x] Dockerize both services; `docker compose` for the full stack
 - [x] CI: lint, strict type-checking, both test suites, build, Docker smoke test
-- [ ] Confirmation modal for high-risk autonomous actions — deferred to M4, which is
-      what introduces the autonomous actions there would be anything to confirm
+- [x] Confirmation modal for high-risk autonomous actions — shipped with M4 as the
+      approval queue; state-changing actions are flagged individually
 - [ ] Hosted deployment (Vercel + Railway/Fly.io) — images are ready; not yet deployed
