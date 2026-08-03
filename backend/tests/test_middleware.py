@@ -38,18 +38,22 @@ def test_oversized_body_rejected_by_content_length():
 
 
 def test_normal_sized_body_passes_through():
-    """The guard must not interfere with ordinary requests."""
+    """The guard must not interfere with ordinary requests.
+
+    Uses a deliberately schema-invalid body so the assertion is that the request
+    reached validation (422) rather than being cut off at the guard (413) — proving
+    pass-through without making a live provider call.
+    """
     r = client.post(
         "/chat",
         headers={"X-Provider-Key": "sk-test"},
         json={
             "provider": "openai",
             "model": "gpt-4o",
-            "messages": [{"role": "user", "text": "hi"}],
+            "messages": [],  # empty -> 422 from the schema, well past the guard
         },
     )
-    # Reaches the handler and fails upstream (no live provider) rather than 413.
-    assert r.status_code != 413
+    assert r.status_code == 422
 
 
 def test_unhandled_error_response_includes_request_id(monkeypatch):
