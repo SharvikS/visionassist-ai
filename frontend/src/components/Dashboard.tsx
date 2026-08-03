@@ -11,38 +11,13 @@ import {
   Waves,
 } from "lucide-react";
 import ApiKeyModal from "./ApiKeyModal";
+import AutomationPanel from "./AutomationPanel";
 import ModelSwitcher from "./ModelSwitcher";
 import ScreenCapturePanel from "./ScreenCapturePanel";
 import TestConsole from "./TestConsole";
 import UsageOverlay from "./UsageOverlay";
 import VoicePanel from "./VoicePanel";
 import { useVault } from "./vault-context";
-
-/** Placeholder for a workspace panel that lands in a later milestone. */
-function ComingSoon({
-  icon,
-  title,
-  milestone,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  milestone: string;
-  children: string;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-surface/50 p-4">
-      <div className="mb-1 flex items-center gap-2 text-sm font-medium">
-        <span className="text-accent">{icon}</span>
-        {title}
-        <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
-          {milestone}
-        </span>
-      </div>
-      <p className="text-xs leading-relaxed text-muted">{children}</p>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const { lock, configured } = useVault();
@@ -134,16 +109,16 @@ export default function Dashboard() {
             <VoicePanel />
           </section>
 
-          {/* Roadmap panels */}
-          <section className="space-y-4 lg:col-span-2">
-            <ComingSoon
-              icon={<MousePointerClick size={16} />}
-              title="On-Screen Automation"
-              milestone="M4"
-            >
-              The model grounds UI targets to coordinates; Playwright or a local daemon
-              executes clicks and typing behind an approval queue.
-            </ComingSoon>
+          {/* On-screen automation (Milestone 4) */}
+          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-medium">
+              <MousePointerClick size={16} className="text-accent" />
+              On-Screen Automation
+              <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                M4 · approval required
+              </span>
+            </div>
+            <AutomationPanel />
           </section>
         </div>
       </main>
