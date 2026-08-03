@@ -1,0 +1,51 @@
+# Local/self-hosted deployment of the full stack.
+#
+#   docker compose up --build
+#   -> frontend on :3000, backend on :8000
+#
+# No database and no broker: the orchestrator holds no state beyond the life of a
+# request or socket, which is the whole point of the BYOK design.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: visionassist-backend:local
+    environment:
+      # Must list the origin the browser actually loads the frontend from.
+      VA_CORS_ORIGINS: ${VA_CORS_ORIGINS:-http://localhost:3000}
+      VA_LOG_FORMAT: ${VA_LOG_FORMAT:-json}
+      VA_LOG_LEVEL: ${VA_LOG_LEVEL:-INFO}
+      # Compose puts the containers behind a bridge network, so every request
+      # arrives from the gateway address. Without trusting the forwarded header
+      # the rate limiter would see all clients as one.
+      VA_TRUST_PROXY_HEADERS: ${VA_TRUST_PROXY_HEADERS:-false}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the client bundle at build time — this is the URL the
+        # browser will call, so it must be reachable from the host, not the
+        # compose-internal service name.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    image: visionassist-frontend:local
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

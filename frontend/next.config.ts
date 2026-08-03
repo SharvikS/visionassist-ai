@@ -30,6 +30,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: { root: projectRoot },
+  /**
+   * Emit a self-contained server bundle (`.next/standalone`) carrying only the modules
+   * actually imported. The container image copies that instead of the whole
+   * node_modules tree, which is the difference between a ~200 MB and a ~1 GB image.
+   */
+  output: "standalone",
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
