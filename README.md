@@ -13,7 +13,7 @@ on active requests.
 ---
 
 ## ✨ Why VisionAssist
-
+  
 | Principle | What it means |
 |-----------|---------------|
 | 🔐 **BYOK & Privacy-first** | Keys are encrypted in your browser with the Web Crypto API. Never persisted server-side. |
