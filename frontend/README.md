@@ -130,6 +130,22 @@ src/
 
 ## Troubleshooting
 
+**The model says it can't see my screen.**
+
+Two causes, both of which look identical from the answer:
+
+1. **Asked in the wrong panel.** The Model Test Console posts text over HTTP and never
+   attaches a frame — frames live on the WebSocket session the Screen Vision panel owns.
+   Screen questions belong in Screen Vision's prompt box. The console is labelled
+   "Text only" for this reason.
+2. **A text-only model is selected.** On Groq, vision is per model. A text-only model
+   given an image does not error; it answers from the words alone and reports that it
+   cannot see a screen. Those models are tagged "· text only" in the dropdown, and
+   Screen Vision refuses to send rather than produce a confident answer from nothing.
+
+Capture itself is working if the panel shows a live preview and the sampled/sent/evicted
+counters are moving — those count real frames reaching the socket.
+
 **The page is stuck on "Loading vault…" and the dev server logs a flood of `GET /`.**
 
 The vault state resolves in a `useEffect`, so that shell is what you see until the client
@@ -153,7 +169,7 @@ origin check, so it is unaffected.
 ## Tests
 
 ```bash
-npm test           # 120 tests (vitest)
+npm test           # 125 tests (vitest)
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint
 ```

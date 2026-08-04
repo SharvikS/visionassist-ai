@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MonitorPlay, MonitorStop, Send, Square } from "lucide-react";
 import { ScreenCapture, type CaptureStats } from "@/lib/capture";
+import { modelSupportsVision } from "@/lib/providers";
 import { SessionSocket } from "@/lib/ws";
 import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
@@ -41,6 +42,9 @@ export default function ScreenCapturePanel() {
   // render, so they can't read the state values.
   const askedRef = useRef("");
   const answerRef = useRef("");
+
+  /** Whether the selected model can actually look at the frames being streamed. */
+  const canSee = modelSupportsVision(activeProvider, activeModel);
 
   const captureRef = useRef<ScreenCapture | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
@@ -131,6 +135,17 @@ export default function ScreenCapturePanel() {
   function ask() {
     const text = prompt.trim();
     if (!text || generating || wsState !== "ready") return;
+    if (!canSee) {
+      // Refuse rather than send. A text-only model answers the question anyway, from the
+      // words alone, and typically insists it cannot see a screen — which looks like the
+      // capture pipeline failing rather than the model being the wrong one.
+      setError(
+        `${activeModel} can't see images, so it would answer without looking at your ` +
+          `screen. Pick a vision model in the sidebar.`,
+      );
+      return;
+    }
+    setError(null);
     setAnswer("");
     setPrompt("");
     setGenerating(true);
@@ -217,6 +232,14 @@ export default function ScreenCapturePanel() {
           </p>
         )}
       </div>
+
+      {!canSee && (
+        <div className="mx-4 mb-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+          <span className="font-medium">{activeModel}</span> can&apos;t see images. Frames
+          are still captured and evicted, but nothing can answer about them until you pick
+          a vision model in the sidebar.
+        </div>
+      )}
 
       {error && (
         <div className="mx-4 mb-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">

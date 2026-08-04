@@ -49,7 +49,7 @@ All five milestones are complete and working end to end.
 | ✅ | **M4** — On-screen automation | Action schema, coordinate mapper, Playwright runner, approval queue |
 | ✅ | **M5** — Polish, rate limiting & deploy | Cost overlay, rate limiting, strict CSP, Docker, CI |
 
-**Quality gates.** 160 backend tests (85% coverage) and 120 frontend tests, with ruff,
+**Quality gates.** 160 backend tests (85% coverage) and 125 frontend tests, with ruff,
 strict mypy, eslint, and `tsc --noEmit` all clean. CI runs the lot on every push, plus a
 Docker build that curls `/health` against a running container. Neither test suite touches
 the network.
@@ -88,7 +88,10 @@ If the backend isn't on `http://localhost:8000`, set `NEXT_PUBLIC_API_URL` in
 
 1. Create a vault passphrase (this encrypts your keys locally — it is never sent anywhere).
 2. Add a provider key via **Manage API keys**.
-3. **Share screen** to start capture, then ask about what's on it.
+3. **Share screen** to start capture, then ask about what's on it — using the prompt box in
+   the **Screen Vision** panel. The Model Test Console next to it is a text-only chat
+   surface and never attaches a frame, so a screen question asked there gets answered
+   without one.
 4. **Start voice** to talk instead. Voice needs an OpenAI key for STT and TTS regardless of
    which model answers.
 
@@ -256,8 +259,11 @@ one and overrides only the base URL and catalog — the payload shaping and SSE 
 inherited rather than duplicated. Two things to know:
 
 - **Vision is per model, not per provider.** The Llama 4 models accept images; the Llama
-  3.x and GPT-OSS ones are text-only and will reject a request carrying a screen frame.
-  That is why the default is a vision-capable model — screen capture is the main path.
+  3.x and GPT-OSS ones are text-only. That is why the default is a vision-capable model —
+  screen capture is the main path. Text-only models are tagged in the model dropdown, and
+  Screen Vision refuses to ask rather than send a frame that will be ignored: a text-only
+  model does not error on an image, it answers from the words alone and states that it
+  cannot see your screen, which is indistinguishable from broken capture.
 - **The catalog moves fast.** Groq adds and retires hosted open-weight models frequently.
   `GET https://api.groq.com/openai/v1/models` with your key returns the live list; treat
   the entries above (and their prices in `frontend/src/lib/cost.ts`) as a starting point
@@ -315,7 +321,7 @@ make test          # everything CI runs: lint, types, both suites, build
 
 # or individually
 cd backend  && pytest --cov          # 160 tests, 85% coverage
-cd frontend && npm test              # 120 tests
+cd frontend && npm test              # 125 tests
 cd frontend && npm run typecheck     # tsc --noEmit
 ```
 

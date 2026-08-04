@@ -149,7 +149,9 @@ export default function TestConsole() {
               }
             }}
             rows={1}
-            placeholder={hasKey ? "Type a prompt…" : "Add an API key to start"}
+            placeholder={
+              hasKey ? "Type a prompt… (text only)" : "Add an API key to start"
+            }
             className="max-h-32 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
           />
           {busy ? (
@@ -170,6 +172,16 @@ export default function TestConsole() {
               <Send size={15} />
             </button>
           )}
+        </div>
+        {/*
+          This console posts text over HTTP and never attaches a frame — screen frames
+          live on the WebSocket session the Screen Vision panel owns. Asking about the
+          screen here gets a fluent "I can't see your screen" from a model that was never
+          sent one, which is indistinguishable from broken capture. Say so up front.
+        */}
+        <div className="mt-2 text-[11px] text-muted">
+          Text only. To ask about your screen, use the prompt box in{" "}
+          <span className="text-foreground">Screen Vision</span>.
         </div>
       </div>
     </div>

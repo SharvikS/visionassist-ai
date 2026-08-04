@@ -8,6 +8,17 @@ export interface ProviderMeta {
   defaultModel: string;
   models: string[];
   supportsVision: boolean;
+  /**
+   * The subset of `models` that accepts images, when only some do. Absent means every
+   * model in the list does.
+   *
+   * Anthropic, OpenAI, and Google ship vision across their whole catalog here, so for
+   * them the provider-level flag is the whole story. Groq does not: it hosts a mix, and a
+   * text-only model given a screen frame does not fail loudly — it answers from the text
+   * alone, producing a confident "I can't see your screen" that reads as a broken app
+   * rather than a wrong model choice.
+   */
+  visionModels?: string[];
   keyHint: string;
   keyPrefix?: string;
 }
@@ -56,12 +67,29 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
       "openai/gpt-oss-20b",
     ],
     supportsVision: true,
+    visionModels: [
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "meta-llama/llama-4-maverick-17b-128e-instruct",
+    ],
     keyHint: "gsk_...",
     keyPrefix: "gsk_",
   },
 };
 
 export const PROVIDER_LIST: ProviderMeta[] = Object.values(PROVIDERS);
+
+/**
+ * Whether this exact model can see an attached screen frame.
+ *
+ * Checked before asking about the screen rather than after: the failure mode is a
+ * plausible-sounding answer produced without ever looking, which is worse than an error
+ * because nothing about it says the image was ignored.
+ */
+export function modelSupportsVision(provider: ProviderId, model: string): boolean {
+  const meta = PROVIDERS[provider];
+  if (!meta.supportsVision) return false;
+  return meta.visionModels ? meta.visionModels.includes(model) : true;
+}
 
 /**
  * Which provider should be selected after a key is saved for `saved`.

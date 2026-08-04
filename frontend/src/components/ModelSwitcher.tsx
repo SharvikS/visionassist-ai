@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_LIST, PROVIDERS } from "@/lib/providers";
+import { modelSupportsVision, PROVIDER_LIST, PROVIDERS } from "@/lib/providers";
 import { useVault } from "./vault-context";
 
 /** Hot-swappable provider + model selector. */
@@ -55,9 +55,19 @@ export default function ModelSwitcher() {
           {PROVIDERS[activeProvider].models.map((m) => (
             <option key={m} value={m}>
               {m}
+              {modelSupportsVision(activeProvider, m) ? "" : " · text only"}
             </option>
           ))}
         </select>
+        {!modelSupportsVision(activeProvider, activeModel) && (
+          // Screen capture is the app's main path, so a text-only model is a dead end
+          // worth naming here rather than letting it be discovered from an answer that
+          // claims it cannot see anything.
+          <p className="mt-1.5 text-xs text-warning">
+            This model can&apos;t see images — Screen Vision won&apos;t work with it. Pick
+            one without the &ldquo;text only&rdquo; tag to ask about your screen.
+          </p>
+        )}
       </div>
     </div>
   );
