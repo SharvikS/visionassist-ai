@@ -21,6 +21,15 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# ---- Coverage artifacts ----
+# `.coverage` is a binary SQLite file rewritten by every test run, so tracking it
+# puts an unreviewable diff in any commit that happened to run the suite.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+coverage/
+
 # ---- Playwright ----
 playwright-report/
 test-results/
