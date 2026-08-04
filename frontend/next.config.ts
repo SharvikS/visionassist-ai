@@ -22,6 +22,21 @@ const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const wsOrigin = apiOrigin.replace(/^http/, "ws");
 
 /**
+ * The dev server's own origin over ws://, for the HMR socket.
+ *
+ * Belt-and-braces, listed explicitly even though the socket is same-origin and Chromium
+ * accepts it under `'self'`: some Firefox versions have not matched ws:// against `'self'`
+ * in connect-src, and this project's dev loop is used from Firefox-family browsers. Not
+ * verified here — it is cheap insurance, not a diagnosed fix. (The reload loop this was
+ * first written for turned out to be `allowedDevOrigins`; see below.)
+ *
+ * Ports vary (3000 is taken often enough that Next picks 3001+), so this is a port wildcard
+ * rather than a guess. Dev-only — the production CSP is unchanged and still pins
+ * connect-src to exactly the one backend origin.
+ */
+const devWsOrigins = isDev ? " ws://localhost:* ws://127.0.0.1:*" : "";
+
+/**
  * Content-Security-Policy.
  *
  * Notes on the two directives that look weak but are not negotiable here:
@@ -35,6 +50,9 @@ const wsOrigin = apiOrigin.replace(/^http/, "ws");
  * the one backend origin (so a compromised dependency cannot exfiltrate a decrypted API
  * key to an arbitrary host), and blob: is permitted only where it is genuinely used —
  * img-src for canvas frames, media-src for TTS audio object URLs.
+ *
+ * In development, connect-src additionally allows the local HMR socket (see devWsOrigins).
+ * That relaxation is compiled out of production builds.
  */
 const csp = [
   "default-src 'self'",
@@ -43,7 +61,7 @@ const csp = [
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ${apiOrigin} ${wsOrigin}`,
+  `connect-src 'self' ${apiOrigin} ${wsOrigin}${devWsOrigins}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -80,6 +98,22 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: { root: projectRoot },
+  /**
+   * Trust 127.0.0.1 as a dev origin, not just `localhost`.
+   *
+   * Next blocks cross-origin requests to dev-only endpoints, and it treats 127.0.0.1 as a
+   * *different* origin from localhost. Without this, opening the dev server at
+   * http://127.0.0.1:3000 — the same address the terminal's "Network:" line and most
+   * copy-pasted curl commands use — gets the HMR WebSocket rejected with a bare
+   * `Unauthorized`, which is not a parseable HTTP response. The browser reports
+   * ERR_INVALID_HTTP_RESPONSE, Next's dev client responds to the dead socket by reloading,
+   * and the page reload-loops several times a second without ever staying alive long
+   * enough to hydrate. The visible symptom is the server-rendered "Loading vault…" shell
+   * forever, which looks like a hung app rather than a wrong hostname.
+   *
+   * Dev-only by definition; it has no effect on a production build.
+   */
+  allowedDevOrigins: ["127.0.0.1"],
   /**
    * Emit a self-contained server bundle (`.next/standalone`) carrying only the modules
    * actually imported. The container image copies that instead of the whole

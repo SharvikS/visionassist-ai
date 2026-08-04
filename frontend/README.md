@@ -126,6 +126,28 @@ src/
     └── api.ts            # backend client (chat + SSE stream)
 ```
 
+## Troubleshooting
+
+**The page is stuck on "Loading vault…" and the dev server logs a flood of `GET /`.**
+
+The vault state resolves in a `useEffect`, so that shell is what you see until the client
+hydrates. A page that reload-loops never gets that far.
+
+The usual cause is Next's dev origin check. Next blocks cross-origin requests to dev-only
+endpoints, and it counts `127.0.0.1` as a different origin from `localhost`. When the
+origin isn't trusted, the HMR WebSocket is rejected with a bare `Unauthorized` — not a
+parseable HTTP response, so the browser reports `ERR_INVALID_HTTP_RESPONSE` — and Next's
+dev client reacts to the dead socket by reloading the page, several times a second.
+
+`allowedDevOrigins` in `next.config.ts` already covers `127.0.0.1`. If you reach the dev
+server by any *other* host — a LAN IP for testing on a phone, a container name, a tunnel
+hostname — add it there too. To confirm this is what you're hitting, check the browser
+console for a failed `ws://…/_next/webpack-hmr` connection; a healthy dev session logs
+`[HMR] connected` instead.
+
+Note this is a development-only mechanism. A production build has no HMR socket and no
+origin check, so it is unaffected.
+
 ## Tests
 
 ```bash
