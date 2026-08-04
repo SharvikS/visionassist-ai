@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, KeyRound, Lock, ShieldCheck } from "lucide-react";
+import Button from "./ui/Button";
 import { useVault } from "./vault-context";
 
 /**
@@ -45,21 +46,24 @@ export default function VaultGate() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-2xl">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <div className="va-aurora" aria-hidden />
+      <div className="va-grid-overlay" aria-hidden />
+
+      <div className="va-panel va-halo va-in-scale relative z-10 w-full max-w-md p-8 shadow-2xl">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/15 text-accent">
+          <div className="va-float relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-violet text-white shadow-lg shadow-accent/30">
             <ShieldCheck size={22} />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold">VisionAssist AI</h1>
+          <div className="va-in-right">
+            <h1 className="va-gradient-text text-lg font-semibold">VisionAssist AI</h1>
             <p className="text-sm text-muted">
               {creating ? "Create your encrypted key vault" : "Unlock your key vault"}
             </p>
           </div>
         </div>
 
-        <p className="mb-5 rounded-lg border border-border bg-surface-2 p-3 text-xs leading-relaxed text-muted">
+        <p className="va-in-up va-d-1 mb-5 rounded-xl border border-border bg-surface-2/60 p-3 text-xs leading-relaxed text-muted">
           Your API keys are encrypted in your browser with AES-256-GCM using this passphrase.
           They never reach our servers. We can&apos;t recover a forgotten passphrase.
         </p>
@@ -76,7 +80,7 @@ export default function VaultGate() {
               onChange={(e) => setPassphrase(e.target.value)}
               placeholder="Passphrase"
               autoFocus
-              className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-10 text-sm outline-none focus:border-accent"
+              className="va-focus w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-10 text-sm outline-none transition-colors duration-300 focus:border-accent"
             />
             <button
               type="button"
@@ -89,7 +93,7 @@ export default function VaultGate() {
           </div>
 
           {creating && (
-            <div className="relative">
+            <div className="va-in-up relative">
               <KeyRound
                 size={16}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
@@ -99,20 +103,20 @@ export default function VaultGate() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="Confirm passphrase"
-                className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:border-accent"
+                className="va-focus w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition-colors duration-300 focus:border-accent"
               />
             </div>
           )}
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && (
+            <p className="va-in-up rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          )}
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-60"
-          >
+          <Button type="submit" loading={busy} className="w-full justify-center py-2.5">
             {busy ? "Working…" : creating ? "Create vault" : "Unlock"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

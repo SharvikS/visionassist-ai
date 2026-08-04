@@ -2,31 +2,61 @@
 
 /*
  * VisionAssist AI — dark-first design system.
+ *
  * The product is a dark-mode dashboard, so we commit to a dark palette by default.
+ *
+ * ANIMATION POLICY — read before adding to this file.
+ *
+ * The capture loop samples the screen ten times a second on the main thread (see
+ * lib/capture.ts). Anything that forces layout or paint during an animation competes
+ * directly with it, and the visible result is dropped frames in the product's core
+ * feature. So every animation here moves `transform`, `opacity`, `filter`, or a
+ * `background-position` on an already-composited layer — never width, height, top, left,
+ * or box-shadow on a hot element.
+ *
+ * The two exceptions are deliberate and both sit outside the capture path: the sidebar
+ * width transition (runs once per toggle, never while sampling) and the meter bars, which
+ * animate `transform: scaleX` rather than width for exactly this reason.
  */
 :root {
   --background: #0a0b0f;
   --surface: #12141c;
   --surface-2: #1a1d28;
+  --surface-3: #212536;
   --border: #262a38;
+  --border-strong: #343a4e;
   --foreground: #e8eaf0;
   --muted: #8b90a3;
   --accent: #6366f1;
   --accent-hover: #7c7ff2;
+  --accent-soft: #4f46e5;
+  --violet: #a855f7;
+  --cyan: #22d3ee;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  /* Easing. `spring` overshoots slightly — used for things that appear, not things that
+     move continuously, where the overshoot would read as a wobble. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-violet: var(--violet);
+  --color-cyan: var(--cyan);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -44,6 +74,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* Thin, dark scrollbars to match the shell. */
@@ -59,11 +90,390 @@ body {
   background: var(--border);
   border-radius: 4px;
 }
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* ============================================================================
+   Ambient background
+   Two large blurred radial blobs drifting on `transform`. Fixed-position and
+   pointer-events:none so they never participate in layout or hit-testing.
+   ========================================================================= */
+
+.va-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.va-aurora::before,
+.va-aurora::after {
+  content: "";
+  position: absolute;
+  width: 45vw;
+  height: 45vw;
+  border-radius: 9999px;
+  filter: blur(120px);
+  opacity: 0.14;
+  will-change: transform;
+}
+.va-aurora::before {
+  background: var(--accent);
+  top: -12vw;
+  left: -8vw;
+  animation: va-drift-a 28s var(--ease-in-out) infinite;
+}
+.va-aurora::after {
+  background: var(--violet);
+  bottom: -14vw;
+  right: -8vw;
+  animation: va-drift-b 34s var(--ease-in-out) infinite;
+}
+
+@keyframes va-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, 5vw, 0) scale(1.15); }
+}
+@keyframes va-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.1); }
+  50% { transform: translate3d(-7vw, -4vw, 0) scale(1); }
+}
+
+/* Faint grid, purely decorative. */
+.va-grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+/* ============================================================================
+   Entrances
+   ========================================================================= */
+
+@keyframes va-in-up {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes va-in-scale {
+  from { opacity: 0; transform: scale(0.965); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes va-in-left {
+  from { opacity: 0; transform: translate3d(-16px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes va-in-right {
+  from { opacity: 0; transform: translate3d(16px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes va-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.va-in-up { animation: va-in-up 0.5s var(--ease-out) both; }
+.va-in-scale { animation: va-in-scale 0.4s var(--ease-out) both; }
+.va-in-left { animation: va-in-left 0.45s var(--ease-out) both; }
+.va-in-right { animation: va-in-right 0.45s var(--ease-out) both; }
+.va-fade { animation: va-fade 0.35s ease both; }
+
+/* Stagger children. Applied by index so a list can cascade without inline styles. */
+.va-d-1 { animation-delay: 60ms; }
+.va-d-2 { animation-delay: 120ms; }
+.va-d-3 { animation-delay: 180ms; }
+.va-d-4 { animation-delay: 240ms; }
+.va-d-5 { animation-delay: 300ms; }
+.va-d-6 { animation-delay: 360ms; }
+
+/* ============================================================================
+   Loops
+   ========================================================================= */
 
 @keyframes va-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-.va-pulse {
-  animation: va-pulse 1.6s ease-in-out infinite;
+.va-pulse { animation: va-pulse 1.6s ease-in-out infinite; }
+
+/* Expanding ring — live capture and active mic. */
+@keyframes va-ring {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.va-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: va-ring 2s var(--ease-out) infinite;
+  will-change: transform, opacity;
+}
+
+/* Sweeping highlight for skeletons and busy strips. */
+@keyframes va-shimmer {
+  0% { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(200%, 0, 0); }
+}
+.va-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.va-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--foreground) 9%, transparent),
+    transparent
+  );
+  animation: va-shimmer 1.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Slow drifting gradient, for text and accent rules. */
+@keyframes va-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.va-gradient-text {
+  background: linear-gradient(
+    100deg,
+    var(--foreground) 20%,
+    var(--accent-hover) 45%,
+    var(--cyan) 60%,
+    var(--foreground) 85%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: va-flow 7s ease-in-out infinite;
+}
+
+@keyframes va-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -4px, 0); }
+}
+.va-float { animation: va-float 4s ease-in-out infinite; }
+
+@keyframes va-spin {
+  to { transform: rotate(360deg); }
+}
+.va-spin { animation: va-spin 1s linear infinite; }
+.va-spin-slow { animation: va-spin 14s linear infinite; }
+
+/* Scanline sweeping down the live capture preview. */
+@keyframes va-scan {
+  0% { transform: translate3d(0, -100%, 0); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate3d(0, 900%, 0); opacity: 0; }
+}
+
+/* Blinking caret for streaming text. */
+@keyframes va-caret {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0.15; }
+}
+.va-caret { animation: va-caret 1.1s steps(1, end) infinite; }
+
+/* Equalizer bars — scaleY only, so no layout on any frame. */
+@keyframes va-eq {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.va-eq-bar {
+  transform-origin: center;
+  animation: va-eq 0.9s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ============================================================================
+   Surfaces
+   ========================================================================= */
+
+.va-panel {
+  position: relative;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--surface) 96%, var(--accent) 4%),
+    var(--surface) 55%
+  );
+  transition:
+    transform 0.35s var(--ease-out),
+    border-color 0.35s ease;
+  will-change: transform;
+}
+.va-panel::before {
+  /* Hairline top highlight — the thing that makes a dark card read as raised. */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 1rem 1rem 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--foreground) 18%, transparent),
+    transparent
+  );
+  opacity: 0.6;
+  transition: opacity 0.35s ease;
+}
+.va-panel:hover {
+  border-color: var(--border-strong);
+  transform: translate3d(0, -2px, 0);
+}
+.va-panel:hover::before {
+  opacity: 1;
+}
+
+/* Glowing halo behind an active panel. Separate element so the blur never
+   invalidates the panel's own paint. */
+.va-halo::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(130deg, var(--accent), var(--violet), var(--cyan));
+  background-size: 200% 200%;
+  animation: va-flow 6s ease-in-out infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.va-glass {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+/* ============================================================================
+   Controls
+   ========================================================================= */
+
+.va-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 0.18s var(--ease-spring),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+  will-change: transform;
+}
+.va-btn:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+}
+.va-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.va-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Diagonal shine that crosses on hover. */
+.va-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    color-mix(in srgb, #fff 22%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translate3d(-120%, 0, 0);
+  transition: transform 0.6s var(--ease-out);
+}
+.va-btn:hover:not(:disabled)::after {
+  transform: translate3d(120%, 0, 0);
+}
+
+/* Focus ring that does not shift layout. */
+.va-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--accent);
+}
+
+/* Sliding indicator for the segmented view switcher. The pill is one element
+   translated across the track, so switching views never re-lays-out the tabs. */
+.va-seg-pill {
+  transition: transform 0.4s var(--ease-spring), width 0.4s var(--ease-spring);
+  will-change: transform;
+}
+
+/* Meter fill. scaleX from a left origin — width would relayout on every sample. */
+.va-meter-fill {
+  transform-origin: left center;
+  transition: transform 0.18s var(--ease-out);
+  will-change: transform;
+}
+
+/* Vertical variant for the mic meter: scales about its own centre so the bars read as a
+   waveform rather than growing off one edge. Shorter transition — the level updates at
+   audio rate and a slow ease would smear it into a flat line. */
+.va-meter-fill-y {
+  transform-origin: center;
+  transition: transform 0.09s linear;
+  will-change: transform;
+}
+
+/* Row hover for lists. */
+.va-row {
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s var(--ease-out),
+    border-color 0.2s ease;
+}
+.va-row:hover {
+  transform: translate3d(2px, 0, 0);
+}
+
+/* ============================================================================
+   Reduced motion
+   Everything above is decorative. If the user has asked for less movement, drop
+   all of it — including the ambient background, which is the most distracting.
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .va-aurora,
+  .va-grid-overlay {
+    display: none;
+  }
+  .va-panel:hover {
+    transform: none;
+  }
 }

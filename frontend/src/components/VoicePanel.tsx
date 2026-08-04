@@ -6,6 +6,7 @@ import { SessionSocket } from "@/lib/ws";
 import { VoiceSession } from "@/lib/voice-session";
 import { SpeechQueue } from "@/lib/speech-queue";
 import { synthesize, transcribe } from "@/lib/voice-api";
+import Button from "./ui/Button";
 import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
@@ -164,25 +165,18 @@ export default function VoicePanel() {
     <div className="flex h-full flex-col p-4">
       <div className="flex items-center gap-3">
         {!active ? (
-          <button
-            onClick={start}
-            disabled={!hasOpenAiKey}
-            className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
-          >
+          <Button onClick={start} disabled={!hasOpenAiKey}>
             <Mic size={15} /> Start voice
-          </button>
+          </Button>
         ) : (
-          <button
-            onClick={teardown}
-            className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted transition hover:border-danger hover:text-danger"
-          >
+          <Button variant="danger" onClick={teardown}>
             <MicOff size={15} /> Stop
-          </button>
+          </Button>
         )}
         <select
           value={voice}
           onChange={(e) => setVoice(e.target.value)}
-          className="rounded-lg border border-border bg-background px-2 py-2 text-xs outline-none focus:border-accent"
+          className="va-focus rounded-xl border border-border bg-surface-2/60 px-2 py-2 text-xs outline-none transition-colors duration-300 focus:border-accent"
         >
           {VOICES.map((v) => (
             <option key={v} value={v}>
@@ -199,18 +193,29 @@ export default function VoicePanel() {
         </p>
       )}
 
-      {/* Mic level meter */}
-      <div className="mt-4 flex h-10 items-center gap-1">
-        {Array.from({ length: 28 }).map((_, i) => {
-          const on = active && level * 28 > i;
+      {/*
+        Mic level meter.
+
+        Each bar is a fixed-height element scaled on the Y axis. The obvious version sets
+        `height` per bar, but that is 28 layout invalidations every time the level
+        updates — at audio rate, on the same main thread as the 10 FPS capture loop.
+        scaleY stays on the compositor.
+      */}
+      <div className="mt-4 flex h-12 items-center justify-center gap-[3px]">
+        {Array.from({ length: 32 }).map((_, i) => {
+          const reach = level * 32;
+          const on = active && reach > i;
+          // Taper toward the edges so the meter reads as a waveform, not a bar chart.
+          const falloff = 1 - Math.abs(i - 15.5) / 20;
+          const scale = on ? Math.max(0.18, Math.min(1, falloff * (0.55 + level * 1.2))) : 0.08;
           return (
-            <div
+            <span
               key={i}
-              className="flex-1 rounded-full transition-all"
-              style={{
-                height: `${on ? 12 + (i % 6) * 4 : 4}px`,
-                background: on ? "var(--accent)" : "var(--border)",
-              }}
+              className={
+                "va-meter-fill-y h-full w-full max-w-[6px] flex-1 rounded-full " +
+                (on ? "bg-gradient-to-t from-accent to-cyan" : "bg-border")
+              }
+              style={{ transform: `scaleY(${scale})` }}
             />
           );
         })}
@@ -219,19 +224,26 @@ export default function VoicePanel() {
       {/* Transcript + answer */}
       <div className="mt-4 flex-1 space-y-3 overflow-y-auto">
         {transcript && (
-          <div>
-            <div className="text-[10px] uppercase tracking-wide text-muted">You said</div>
-            <p className="text-sm">{transcript}</p>
+          <div className="va-in-right rounded-xl border border-border bg-surface-2/60 p-3">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">
+              You said
+            </div>
+            <p className="text-sm leading-relaxed">{transcript}</p>
           </div>
         )}
         {answer && (
-          <div>
-            <div className="text-[10px] uppercase tracking-wide text-muted">Assistant</div>
-            <p className="whitespace-pre-wrap text-sm">{answer}</p>
+          <div className="va-in-left rounded-xl border border-accent/25 bg-accent/5 p-3">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-accent">
+              Assistant
+            </div>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {answer}
+              {state === "speaking" && <span className="va-caret ml-0.5 text-accent">▍</span>}
+            </p>
           </div>
         )}
         {!transcript && !answer && (
-          <p className="text-center text-sm text-muted">
+          <p className="va-fade text-center text-sm text-muted">
             {active ? "Listening… just start talking." : "Start voice and speak."}
           </p>
         )}
@@ -249,15 +261,36 @@ export default function VoicePanel() {
 function StatePill({ state, active }: { state: VoiceState; active: boolean }) {
   if (!active) return null;
   const map: Record<VoiceState, { label: string; cls: string }> = {
-    idle: { label: "idle", cls: "text-muted" },
-    listening: { label: "listening", cls: "text-success" },
-    thinking: { label: "thinking", cls: "text-warning" },
-    speaking: { label: "speaking", cls: "text-accent" },
+    idle: { label: "idle", cls: "text-muted border-border" },
+    listening: { label: "listening", cls: "text-success border-success/40 bg-success/10" },
+    thinking: { label: "thinking", cls: "text-warning border-warning/40 bg-warning/10" },
+    speaking: { label: "speaking", cls: "text-accent border-accent/40 bg-accent/10" },
   };
   const { label, cls } = map[state];
   return (
-    <span className={"ml-auto flex items-center gap-1.5 text-xs " + cls}>
-      <span className="h-1.5 w-1.5 rounded-full va-pulse" style={{ background: "currentColor" }} />
+    <span
+      className={
+        "va-in-scale ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors duration-300 " +
+        cls
+      }
+    >
+      {state === "thinking" ? (
+        // Three-bar equaliser reads as work in progress without implying a percentage.
+        <span className="flex h-3 items-center gap-[2px]">
+          {[0, 1, 2].map((d) => (
+            <span
+              key={d}
+              className="va-eq-bar h-full w-[2px] rounded-full bg-current"
+              style={{ animationDelay: `${d * 140}ms` }}
+            />
+          ))}
+        </span>
+      ) : (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="va-ring absolute inset-0 rounded-full" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-current" />
+        </span>
+      )}
       {label}
     </span>
   );

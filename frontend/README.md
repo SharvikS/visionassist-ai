@@ -74,6 +74,34 @@ The backend must be running (default `http://localhost:8000`) for the Model Test
   single backend origin (plus its `ws`/`wss` form), so a compromised dependency can't
   exfiltrate a decrypted key to an arbitrary host.
 
+## Design system & motion
+
+Tokens, keyframes, and the shared surface/control classes live in `src/app/globals.css`;
+the primitives that consume them are in `src/components/ui/` (`Button`, `Panel`,
+`SegmentedControl`, `Stat`).
+
+**Layout.** The workspace is a bento grid with Screen Vision as the hero (7 of 12 columns,
+two rows tall). A segmented control in the header switches between the grid and a single
+focused panel; each panel's expand button targets the same state, so the tab bar and the
+expand control are one mechanism rather than two.
+
+**The motion rule — read `globals.css`'s header before adding animation.** The capture loop
+samples the screen ten times a second on the main thread. Anything that forces layout or
+paint mid-animation competes with it, and the visible result is dropped frames in the
+product's core feature. So every animation moves `transform`, `opacity`, `filter`, or a
+`background-position`. Two places where the obvious implementation was the wrong one:
+
+- The **mic meter** scales 32 bars on the Y axis instead of setting their `height`. The
+  height version is 32 layout invalidations per level update, at audio rate.
+- **Stat bars** and the segmented control's indicator use `transform` (`scaleX`,
+  `translateX`) rather than `width`/`left` for the same reason.
+
+There is no animation library. Framer Motion would add a bundle and run animation on the
+main thread next to the sampler; CSS keyframes run on the compositor.
+
+Everything decorative is disabled under `prefers-reduced-motion`, including the ambient
+background, which is the most distracting part for anyone who has asked for less movement.
+
 ## Hot-path notes
 
 The capture loop runs 10× a second on the main thread, so the ordering in `capture.ts` is
@@ -100,6 +128,11 @@ src/
 │   ├── page.tsx          # renders <AppRoot/>
 │   └── globals.css       # design tokens
 ├── components/
+│   ├── ui/               # design-system primitives
+│   │   ├── Button.tsx        # variants, press feedback, hover shine, loading
+│   │   ├── Panel.tsx         # workspace card + expand-to-focus control
+│   │   ├── SegmentedControl.tsx  # view switcher with a sliding indicator
+│   │   └── Stat.tsx          # metric tile with a scaleX fill bar
 │   ├── AppRoot.tsx       # vault-state router (gate vs dashboard)
 │   ├── vault-context.tsx # React context over the vault
 │   ├── usage-context.tsx # React context over session usage

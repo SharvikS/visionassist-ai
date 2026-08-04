@@ -5,6 +5,8 @@ import { MonitorPlay, MonitorStop, Send, Square } from "lucide-react";
 import { ScreenCapture, type CaptureStats } from "@/lib/capture";
 import { modelSupportsVision } from "@/lib/providers";
 import { SessionSocket } from "@/lib/ws";
+import Button from "./ui/Button";
+import Stat from "./ui/Stat";
 import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
@@ -162,40 +164,70 @@ export default function ScreenCapturePanel() {
   return (
     <div className="flex h-full flex-col">
       {/* Preview + controls */}
-      <div className="border-b border-border p-4">
-        <div className="relative aspect-video overflow-hidden rounded-lg border border-border bg-black">
-          <video ref={videoRef} muted playsInline className="h-full w-full object-contain" />
+      <div className="shrink-0 border-b border-border/70 p-4">
+        {/*
+          Fixed height rather than a 16:9 box. This is the widest panel in the bento grid,
+          and at that width an aspect-video preview grows tall enough to push the stats and
+          prompt bar out of the panel. Constraining the aspect box with max-height instead
+          would shrink its *width* too (aspect-ratio keeps the ratio), leaving dead space
+          beside the video. A full-width strip with object-contain letterboxes cleanly at
+          any source resolution.
+        */}
+        <div className="group/preview relative h-[clamp(150px,24vh,290px)] w-full overflow-hidden rounded-xl border border-border bg-black">
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            className="h-full w-full object-contain transition-transform duration-700 group-hover/preview:scale-[1.02]"
+          />
           {!capturing && (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted">
+              <MonitorPlay size={22} className="va-float opacity-40" />
               No screen shared
             </div>
           )}
           {capturing && (
-            <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success va-pulse" /> LIVE
-            </span>
+            <>
+              {/* Scanline sweep — pure transform, so it costs nothing per capture tick. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-accent/25 to-transparent"
+                style={{ animation: "va-scan 3.5s var(--ease-in-out) infinite" }}
+              />
+              <span className="va-in-scale absolute right-2 top-2 flex items-center gap-1.5 rounded-full border border-success/30 bg-black/70 px-2 py-0.5 text-[10px] font-medium text-success backdrop-blur">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="va-ring absolute inset-0 rounded-full text-success" />
+                  <span className="relative h-1.5 w-1.5 rounded-full bg-success" />
+                </span>
+                LIVE
+              </span>
+            </>
           )}
         </div>
 
         <div className="mt-3 flex items-center gap-2">
           {!capturing ? (
-            <button
-              onClick={start}
-              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover"
-            >
+            <Button onClick={start}>
               <MonitorPlay size={15} /> Share screen
-            </button>
+            </Button>
           ) : (
-            <button
-              onClick={teardown}
-              className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted transition hover:border-danger hover:text-danger"
-            >
+            <Button variant="danger" onClick={teardown}>
               <MonitorStop size={15} /> Stop
-            </button>
+            </Button>
           )}
-          <span className="text-xs text-muted">
+          <span className="flex items-center gap-1.5 text-xs text-muted">
+            <span
+              className={
+                "h-1.5 w-1.5 rounded-full transition-colors duration-500 " +
+                (wsState === "ready"
+                  ? "bg-success"
+                  : wsState === "idle"
+                    ? "bg-border-strong"
+                    : "va-pulse bg-warning")
+              }
+            />
             {wsState === "ready"
-              ? "● connected"
+              ? "connected"
               : wsState === "no_key"
                 ? "add an API key to ask"
                 : wsState}
@@ -203,13 +235,27 @@ export default function ScreenCapturePanel() {
         </div>
 
         {/* Eviction stats */}
-        <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-          <Stat label="Sampled" value={stats.sampled} />
-          <Stat label="Sent" value={stats.dispatched} accent />
-          <Stat label="Evicted" value={stats.evicted} />
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <Stat
+            label="Sampled"
+            value={stats.sampled}
+            ratio={stats.sampled ? 1 : 0}
+          />
+          <Stat
+            label="Sent"
+            value={stats.dispatched}
+            accent
+            ratio={stats.sampled ? stats.dispatched / stats.sampled : 0}
+          />
+          <Stat
+            label="Evicted"
+            value={stats.evicted}
+            ratio={stats.sampled ? stats.evicted / stats.sampled : 0}
+          />
           <Stat
             label="Saved"
             value={stats.sampled ? `${Math.round((stats.evicted / stats.sampled) * 100)}%` : "0%"}
+            ratio={stats.sampled ? stats.evicted / stats.sampled : 0}
           />
         </div>
         {stats.width > 0 && (
@@ -221,11 +267,24 @@ export default function ScreenCapturePanel() {
       </div>
 
       {/* Answer stream */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {answer ? (
-          <p className="whitespace-pre-wrap text-sm">{answer}</p>
+          <p className="va-fade whitespace-pre-wrap text-sm leading-relaxed">
+            {answer}
+            {generating && <span className="va-caret ml-0.5 text-accent">▍</span>}
+          </p>
+        ) : generating ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className={`va-shimmer h-3 rounded-full bg-surface-2 va-d-${i + 1}`}
+                style={{ width: `${92 - i * 18}%` }}
+              />
+            ))}
+          </div>
         ) : (
-          <p className="text-center text-sm text-muted">
+          <p className="va-fade text-center text-sm text-muted">
             {capturing
               ? "Ask a question about what's on your screen."
               : "Share a screen to begin."}
@@ -268,25 +327,26 @@ export default function ScreenCapturePanel() {
                   ? "Add an API key (sidebar) to ask about the screen"
                   : "Ask about the screen…"
             }
-            className="max-h-32 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50"
+            className="va-focus max-h-32 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-300 focus:border-accent disabled:opacity-50"
           />
           {generating ? (
-            <button
+            <Button
+              variant="danger"
+              size="icon"
               onClick={stopGeneration}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted hover:text-danger"
               aria-label="Interrupt"
             >
               <Square size={15} />
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              size="icon"
               onClick={ask}
               disabled={!prompt.trim() || wsState !== "ready"}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white transition hover:bg-accent-hover disabled:opacity-50"
               aria-label="Ask"
             >
               <Send size={15} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -294,19 +354,3 @@ export default function ScreenCapturePanel() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number | string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-surface-2 py-2">
-      <div className={"text-sm font-semibold " + (accent ? "text-accent" : "")}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
-    </div>
-  );
-}

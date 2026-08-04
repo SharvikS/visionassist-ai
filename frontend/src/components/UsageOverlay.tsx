@@ -20,25 +20,35 @@ export default function UsageOverlay() {
   const cost = estimateCost(usage, activeProvider, activeModel);
 
   return (
-    <div className="rounded-lg border border-border bg-background p-3">
+    <div className="group relative overflow-hidden rounded-xl border border-border bg-surface-2/40 p-3 transition-colors duration-300 hover:border-border-strong">
+      {/* Accent wash that warms as the panel is hovered. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-accent/10 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100"
+      />
       <div className="mb-2 flex items-center gap-2">
         <Coins size={14} className="text-accent" />
-        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted">
           Session usage
         </span>
         <button
           onClick={reset}
-          className="ml-auto text-muted transition hover:text-foreground"
+          className="va-btn va-focus ml-auto rounded-md p-1 text-muted transition hover:text-foreground"
           aria-label="Reset usage counters"
           title="Reset usage counters"
         >
-          <RotateCcw size={13} />
+          <RotateCcw
+            size={13}
+            className="transition-transform duration-500 group-hover:-rotate-180"
+          />
         </button>
       </div>
 
       <div className="flex items-baseline justify-between">
-        <span className="text-lg font-semibold tabular-nums">{formatUsd(cost)}</span>
-        <span className="text-[10px] uppercase tracking-wide text-muted">est.</span>
+        <span className="va-gradient-text text-xl font-semibold tabular-nums">
+          {formatUsd(cost)}
+        </span>
+        <span className="text-[10px] uppercase tracking-wider text-muted">est.</span>
       </div>
 
       <dl className="mt-2 space-y-1 text-[11px] text-muted">
@@ -59,7 +69,7 @@ export default function UsageOverlay() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
+    <div className="va-row flex justify-between rounded px-1 py-0.5 hover:bg-surface-2/60">
       <dt>{label}</dt>
       <dd className="tabular-nums text-foreground">{value}</dd>
     </div>

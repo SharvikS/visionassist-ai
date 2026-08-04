@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, Boxes, Cpu } from "lucide-react";
 import { modelSupportsVision, PROVIDER_LIST, PROVIDERS } from "@/lib/providers";
 import { useVault } from "./vault-context";
 
@@ -13,16 +14,16 @@ export default function ModelSwitcher() {
     configured,
   } = useVault();
 
+  const hasKey = configured.includes(activeProvider);
+  const canSee = modelSupportsVision(activeProvider, activeModel);
+
   return (
     <div className="space-y-3">
-      <div>
-        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
-          Provider
-        </label>
+      <Field icon={Boxes} label="Provider">
         <select
           value={activeProvider}
           onChange={(e) => setActiveProvider(e.target.value as never)}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+          className="va-focus w-full appearance-none rounded-xl border border-border bg-surface-2/60 py-2 pl-9 pr-3 text-sm outline-none transition-colors duration-300 hover:border-border-strong focus:border-accent"
         >
           {PROVIDER_LIST.map((p) => (
             <option key={p.id} value={p.id}>
@@ -31,26 +32,21 @@ export default function ModelSwitcher() {
             </option>
           ))}
         </select>
-        {!configured.includes(activeProvider) && (
-          // The panels all refuse to run without a key for the *selected* provider. Saying
-          // so here is the difference between "configured, but pointed elsewhere" and an
-          // app that looks silently broken.
-          <p className="mt-1.5 text-xs text-muted">
-            No key for {PROVIDERS[activeProvider].label}. Add one under{" "}
-            <span className="text-foreground">Manage API keys</span>, or pick a provider
-            marked ✓.
-          </p>
-        )}
-      </div>
+      </Field>
 
-      <div>
-        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
-          Model
-        </label>
+      {!hasKey && (
+        <Note tone="muted">
+          No key for {PROVIDERS[activeProvider].label}. Add one under{" "}
+          <span className="text-foreground">Manage API keys</span>, or pick a provider
+          marked ✓.
+        </Note>
+      )}
+
+      <Field icon={Cpu} label="Model">
         <select
           value={activeModel}
           onChange={(e) => setActiveModel(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+          className="va-focus w-full appearance-none rounded-xl border border-border bg-surface-2/60 py-2 pl-9 pr-3 text-sm outline-none transition-colors duration-300 hover:border-border-strong focus:border-accent"
         >
           {PROVIDERS[activeProvider].models.map((m) => (
             <option key={m} value={m}>
@@ -59,16 +55,62 @@ export default function ModelSwitcher() {
             </option>
           ))}
         </select>
-        {!modelSupportsVision(activeProvider, activeModel) && (
-          // Screen capture is the app's main path, so a text-only model is a dead end
-          // worth naming here rather than letting it be discovered from an answer that
-          // claims it cannot see anything.
-          <p className="mt-1.5 text-xs text-warning">
-            This model can&apos;t see images — Screen Vision won&apos;t work with it. Pick
-            one without the &ldquo;text only&rdquo; tag to ask about your screen.
-          </p>
-        )}
+      </Field>
+
+      {!canSee && (
+        <Note tone="warning">
+          This model can&apos;t see images — Screen Vision won&apos;t work with it. Pick
+          one without the &ldquo;text only&rdquo; tag to ask about your screen.
+        </Note>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: typeof Boxes;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted">
+        {label}
+      </label>
+      <div className="relative">
+        <Icon
+          size={14}
+          className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-accent"
+        />
+        {children}
       </div>
     </div>
+  );
+}
+
+function Note({
+  tone,
+  children,
+}: {
+  tone: "muted" | "warning";
+  children: React.ReactNode;
+}) {
+  const warn = tone === "warning";
+  return (
+    <p
+      className={
+        "va-in-up flex gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] leading-relaxed " +
+        (warn
+          ? "border-warning/30 bg-warning/10 text-warning"
+          : "border-border bg-surface-2/50 text-muted")
+      }
+    >
+      {warn && <AlertTriangle size={13} className="mt-px shrink-0" />}
+      <span>{children}</span>
+    </p>
   );
 }

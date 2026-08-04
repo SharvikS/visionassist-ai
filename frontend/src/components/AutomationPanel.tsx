@@ -17,6 +17,7 @@ import {
   riskOf,
 } from "@/lib/automation";
 import { ScreenCapture } from "@/lib/capture";
+import Button from "./ui/Button";
 import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
@@ -164,16 +165,16 @@ export default function AutomationPanel() {
           placeholder={
             hasKey ? "What should it do? e.g. search for the docs" : "Add an API key first"
           }
-          className="max-h-24 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50"
+          className="va-focus max-h-24 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-300 focus:border-accent disabled:opacity-50"
         />
-        <button
+        <Button
           onClick={propose}
-          disabled={!goal.trim() || busy || phase === "review" || !hasKey}
-          className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+          disabled={!goal.trim() || phase === "review" || !hasKey}
+          loading={phase === "planning"}
         >
-          <MousePointerClick size={15} />
+          {phase !== "planning" && <MousePointerClick size={15} />}
           {phase === "planning" ? "Planning…" : "Plan"}
-        </button>
+        </Button>
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-muted">
@@ -183,7 +184,7 @@ export default function AutomationPanel() {
 
       <div className="mt-3 flex-1 overflow-y-auto">
         {phase === "review" && plan && (
-          <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+          <div className="va-in-up rounded-xl border border-warning/40 bg-warning/5 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium">
               <ShieldQuestion size={15} className="text-warning" />
               Approve {plan.actions.length}{" "}
@@ -192,7 +193,13 @@ export default function AutomationPanel() {
 
             <ol className="space-y-2">
               {plan.actions.map((action, i) => (
-                <li key={i} className="flex gap-2 text-xs">
+                <li
+                  key={i}
+                  className={
+                    "va-row va-in-up flex gap-2 rounded-lg border border-transparent p-1.5 text-xs hover:border-border hover:bg-surface-2/50 " +
+                    `va-d-${Math.min(i + 1, 6)}`
+                  }
+                >
                   <span className="mt-0.5 tabular-nums text-muted">{i + 1}.</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
@@ -229,18 +236,12 @@ export default function AutomationPanel() {
             )}
 
             <div className="mt-3 flex gap-2">
-              <button
-                onClick={approve}
-                className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:bg-accent-hover"
-              >
+              <Button onClick={approve} size="sm">
                 <Play size={14} /> Run {plan.actions.length}
-              </button>
-              <button
-                onClick={reject}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition hover:border-danger hover:text-danger"
-              >
+              </Button>
+              <Button onClick={reject} variant="danger" size="sm">
                 <X size={14} /> Reject
-              </button>
+              </Button>
             </div>
           </div>
         )}

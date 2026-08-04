@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, Square } from "lucide-react";
 import { streamChat, type ChatMessage } from "@/lib/api";
+import Button from "./ui/Button";
 import { useUsage } from "./usage-context";
 import { useVault } from "./vault-context";
 
@@ -115,17 +116,40 @@ export default function TestConsole() {
         {turns.map((t, i) => (
           <div
             key={i}
-            className={t.role === "user" ? "flex justify-end" : "flex justify-start"}
+            className={
+              (t.role === "user"
+                ? "va-in-right flex justify-end"
+                : "va-in-left flex justify-start") + " "
+            }
           >
             <div
               className={
-                "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm " +
+                "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-lg " +
                 (t.role === "user"
-                  ? "bg-accent text-white"
-                  : "border border-border bg-surface-2")
+                  ? "bg-gradient-to-br from-accent to-accent-soft text-white shadow-accent/20"
+                  : "border border-border bg-surface-2/80 shadow-black/20")
               }
             >
-              {t.text || (busy ? <span className="va-pulse">▍</span> : "")}
+              {t.text ||
+                (busy ? (
+                  <span className="flex gap-1 py-1">
+                    {[0, 1, 2].map((d) => (
+                      <span
+                        key={d}
+                        className="h-1.5 w-1.5 rounded-full bg-muted"
+                        style={{
+                          animation: "va-pulse 1.2s ease-in-out infinite",
+                          animationDelay: `${d * 160}ms`,
+                        }}
+                      />
+                    ))}
+                  </span>
+                ) : (
+                  ""
+                ))}
+              {t.role === "assistant" && t.text && busy && i === turns.length - 1 && (
+                <span className="va-caret ml-0.5 text-accent">▍</span>
+              )}
             </div>
           </div>
         ))}
@@ -152,25 +176,21 @@ export default function TestConsole() {
             placeholder={
               hasKey ? "Type a prompt… (text only)" : "Add an API key to start"
             }
-            className="max-h-32 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+            className="va-focus max-h-32 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-300 focus:border-accent"
           />
           {busy ? (
-            <button
-              onClick={stop}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted hover:text-danger"
-              aria-label="Stop"
-            >
+            <Button variant="danger" size="icon" onClick={stop} aria-label="Stop">
               <Square size={15} />
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              size="icon"
               onClick={send}
               disabled={!input.trim()}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white transition hover:bg-accent-hover disabled:opacity-50"
               aria-label="Send"
             >
               <Send size={15} />
-            </button>
+            </Button>
           )}
         </div>
         {/*
