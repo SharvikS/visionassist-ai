@@ -46,6 +46,32 @@ The backend must be running (default `http://localhost:8000`) for the Model Test
   meter and **barge-in interruption** (talking cancels the in-flight answer and stops playback)
   (`src/components/VoicePanel.tsx`). Voice uses your OpenAI key for STT + TTS.
 
+## What's implemented (Milestone 4)
+
+- **Automation client** — typed mirror of the backend action schema (`src/lib/automation.ts`).
+  The types are a deliberate mirror rather than a loose `unknown`: the approval UI renders
+  these fields to a human deciding whether to let them run, so a shape change that silently
+  drops a field from the review is a safety regression, not a cosmetic one.
+- **Approval queue** — every plan is reviewed action by action before anything runs
+  (`src/components/AutomationPanel.tsx`). Plan and execute are separate round trips; the
+  `approved` flag is passed explicitly at the call site so the gate is visible in the code,
+  not implied by which function was called.
+- State-changing actions (`navigate`, `click`, `type`, `press`) are flagged `high` risk and
+  are never pre-selected. Automation is **off** unless the backend sets
+  `VA_AUTOMATION_ENABLED=true`, and returns a clear 503 otherwise.
+
+## What's implemented (Milestone 5)
+
+- **Usage & cost overlay** — live per-session token and USD estimates
+  (`src/lib/cost.ts`, `src/components/UsageOverlay.tsx`, `src/components/usage-context.tsx`).
+  These are explicitly *estimates*: the streaming path doesn't surface upstream token
+  counts, so it counts characters and applies a ratio. `PRICING_AS_OF` makes a stale price
+  table visible rather than silent. A screen-sharing assistant can run up a bill quickly
+  and invisibly — a rough number that is obviously rough beats no number.
+- **Strict CSP + security headers** in `next.config.ts`. `connect-src` is pinned to the
+  single backend origin (plus its `ws`/`wss` form), so a compromised dependency can't
+  exfiltrate a decrypted key to an arbitrary host.
+
 ## Hot-path notes
 
 The capture loop runs 10× a second on the main thread, so the ordering in `capture.ts` is
@@ -74,6 +100,7 @@ src/
 ├── components/
 │   ├── AppRoot.tsx       # vault-state router (gate vs dashboard)
 │   ├── vault-context.tsx # React context over the vault
+│   ├── usage-context.tsx # React context over session usage
 │   ├── VaultGate.tsx     # create / unlock screens
 │   ├── Dashboard.tsx     # sidebar + workspace shell
 │   ├── ErrorBoundary.tsx
@@ -81,6 +108,8 @@ src/
 │   ├── ApiKeyModal.tsx
 │   ├── ScreenCapturePanel.tsx
 │   ├── VoicePanel.tsx
+│   ├── AutomationPanel.tsx  # plan review + approval queue
+│   ├── UsageOverlay.tsx     # live token/cost estimate
 │   └── TestConsole.tsx
 └── lib/
     ├── crypto.ts         # Web Crypto AES-GCM primitives
@@ -91,6 +120,22 @@ src/
     ├── voice-session.ts  # mic capture + VAD
     ├── voice-api.ts      # STT/TTS client
     ├── speech-queue.ts   # sentence-pipelined TTS playback
+    ├── automation.ts     # automation client + action types
+    ├── cost.ts           # pricing table + cost estimation
     ├── ws.ts             # WebSocket session client
     └── api.ts            # backend client (chat + SSE stream)
 ```
+
+## Tests
+
+```bash
+npm test           # 111 tests (vitest)
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint
+```
+
+The suite covers the framework-free libraries — frame eviction, the AES-GCM vault, the
+speech queue's barge-in path, WebSocket reconnect/backpressure, action-plan risk
+classification, and cost estimation. Vault tests assert that neither a plaintext key nor
+the passphrase ever reaches `localStorage`. Nothing makes a network call, so no API key is
+needed.

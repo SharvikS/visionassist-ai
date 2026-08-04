@@ -29,6 +29,12 @@ Open http://localhost:8000/docs for interactive API docs.
 | `POST` | `/voice/tts` | Stream synthesized speech (MP3). |
 | `GET`  | `/voice/voices` | Available TTS voices and default models. |
 | `WS`   | `/ws/session` | Full-duplex session: frames in, tokens out. |
+| `POST` | `/automation/plan` | Propose an action plan from a screenshot. Runs nothing. |
+| `POST` | `/automation/execute` | Run a human-approved plan in a fresh browser context. |
+
+The two automation endpoints are separate on purpose: `/plan` has no side effects, so a
+model's output stays inert until a person has read it and posted it back with
+`approved: true`. Both return `503` unless `VA_AUTOMATION_ENABLED=true`.
 
 ### Example
 
@@ -81,6 +87,18 @@ keys live here — VisionAssist is BYOK.
 | `VA_MAX_KEEPALIVE_CONNECTIONS` | `20` | Warm connections kept between requests. |
 | `VA_KEEPALIVE_EXPIRY` | `60.0` | Seconds an idle pooled connection is retained. |
 | `VA_WS_IDLE_TIMEOUT` | `300.0` | Close silent WebSocket sessions (frees the in-memory key). |
+| `VA_LOG_LEVEL` | `INFO` | Log verbosity. |
+| `VA_LOG_FORMAT` | `text` | `text` for humans, `json` for log aggregators. |
+| `VA_MAX_BODY_BYTES` | `25165824` | Ceiling on a request body, enforced before buffering. |
+| `VA_MAX_AUDIO_BYTES` | `26214400` | Largest STT upload (matches Whisper's limit). |
+| `VA_MAX_TTS_CHARS` | `4096` | Longest text accepted for synthesis. |
+| `VA_RATE_LIMIT_ENABLED` | `true` | Token-bucket limiting on `/chat` and `/voice`. |
+| `VA_RATE_LIMIT_RPS` | `2` | Sustained requests/second per client. |
+| `VA_RATE_LIMIT_BURST` | `20` | Burst allowance. |
+| `VA_MAX_WS_SESSIONS_PER_CLIENT` | `8` | Concurrent WebSocket sessions per client. |
+| `VA_TRUST_PROXY_HEADERS` | `false` | Honour `X-Forwarded-For`. Enable **only** behind a proxy that overwrites it. |
+| `VA_AUTOMATION_ENABLED` | `false` | Enable the automation endpoints. Off by default. |
+| `VA_AUTOMATION_HEADLESS` | `true` | Run the Playwright browser headless. |
 
 ## Layout
 
@@ -92,17 +110,39 @@ app/
 ├── schemas.py         # shared pydantic models + input limits
 ├── router.py          # ModelRouter — provider-agnostic dispatch
 ├── voice.py           # Whisper STT + OpenAI TTS
+├── middleware.py      # raw ASGI: request context, body limits, rate limiting
+├── rate_limit.py      # per-client token buckets
+├── logging_config.py  # text/JSON formatters, request-ID injection
 ├── providers/         # one adapter per provider
 │   ├── base.py
 │   ├── anthropic_provider.py
 │   ├── openai_provider.py
 │   └── gemini_provider.py
-└── routes/            # health, chat, voice, ws
+├── automation/        # M4 — off unless VA_AUTOMATION_ENABLED
+│   ├── schema.py          # ActionPlan: the validation boundary
+│   ├── coordinates.py     # normalized [0,1] → pixel mapping
+│   ├── prompt.py          # planning system prompt
+│   ├── runner.py          # executes a plan, stops at first failure
+│   └── playwright_page.py # optional-dependency browser launch
+└── routes/            # health, chat, voice, ws, automation
 ```
+
+Middleware is raw ASGI rather than `BaseHTTPMiddleware` on purpose: the latter buffers
+responses through a memory stream, which would collapse SSE token deltas and streamed TTS
+audio back into a single blob.
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+pytest --cov        # 156 tests, 85% coverage
+ruff check . && mypy
 ```
+
+Covers payload shaping, input validation, the WebSocket control plane, rate limiting,
+request/body middleware, connection pooling, the automation schema and runner, and the
+provider SSE parsers (against a mock transport). The error-redaction tests assert that a
+rejected API key never appears in a surfaced error, on both the buffered and streaming
+paths, and one test asserts that `/automation/plan` never launches a browser.
+
+No test makes a network call, so no API key is needed.

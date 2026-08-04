@@ -301,8 +301,8 @@ balancer, or move the buckets to Redis, if that matters to you.
 make test          # everything CI runs: lint, types, both suites, build
 
 # or individually
-cd backend  && pytest --cov          # 85 tests, 85% coverage
-cd frontend && npm test              # 100 tests
+cd backend  && pytest --cov          # 156 tests, 85% coverage
+cd frontend && npm test              # 111 tests
 cd frontend && npm run typecheck     # tsc --noEmit
 ```
 
@@ -351,10 +351,18 @@ plain HTTP exposes them on the wire.
 
 ## Roadmap
 
-- **M4 — On-screen automation.** JSON action schema, normalized→pixel coordinate mapper,
-  Playwright runner, and an approval queue for high-risk actions. Not started — this is the
-  one milestone still outstanding, and the confirmation-modal work is scoped with it since
-  there are no autonomous actions to confirm until the runner exists.
+All five milestones are shipped. Two things are deliberately *not* built, and both are
+decisions rather than gaps:
+
+- **No desktop OS automation daemon.** A PyAutoGUI-style bridge was scoped in M4 and
+  dropped. It moves the blast radius from one browser tab to everything the user's account
+  can do, and an approval queue doesn't compensate once a plan is approved. Automation is
+  web-only by design — see [Automation](#on-screen-automation-m4).
+- **Rate limiting stays in-process.** Redis-backed buckets would be correct across
+  replicas, but this deploys as two processes; limit at the load balancer instead.
+
+Genuinely outstanding: **hosted deployment** (Vercel + Railway/Fly.io). Both images build
+and the compose stack runs healthchecked — nothing is deployed to a public URL yet.
 
 Details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 

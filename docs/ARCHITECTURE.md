@@ -35,7 +35,7 @@ brokers streaming multimodal calls to the user's chosen LLM provider and drives 
 | `Key Manager` | Receives the per-request key via encrypted header; keeps it in-memory only. |
 | `Model Router` | Normalizes chat/vision/stream calls across providers. |
 | `Streaming Pipeline` | STT → Vision LLM → TTS orchestration with backpressure + cancellation. |
-| `Command Bridge` | Emits validated automation actions to Playwright or the local OS daemon. |
+| `Command Bridge` | Validates model-proposed action plans and executes approved ones in a Playwright browser this backend owns. There is no OS-level input path — see [Automation](#automation). |
 
 ## Control-plane message contract (WebSocket)
 
@@ -56,26 +56,81 @@ All control messages are JSON with a `type` discriminator.
 | `error` | server → client | Validation or upstream failure; the session stays open. |
 | `pong` | server → client | Reply to `ping`. |
 
-**Planned (M4):**
-
-| `type` | Direction | Purpose |
-|--------|-----------|---------|
-| `action` | server → client | Proposed automation action (see below). |
-
 Audio does not cross this socket. STT and TTS use the `/voice/*` HTTP endpoints, which keeps
 the control plane small and lets speech synthesis be pipelined per sentence on the client.
 
-## Automation action schema
+Automation does not cross it either. An earlier draft of M4 planned a server → client
+`action` message; the shipped design uses two HTTP endpoints instead, because approval is
+a request/response interaction with a human in the middle, not a stream. A pushed action
+frame would have arrived unsolicited and needed its own correlation and approval protocol
+layered back on top of the socket.
+
+## Automation
+
+Off unless `VA_AUTOMATION_ENABLED=true`. It is the only part of the service that *acts*
+rather than answers, so it does not enable itself.
+
+### The flow
+
+```
+POST /automation/plan       model proposes  →  nothing runs
+        ↓  human reads the plan, action by action
+POST /automation/execute    approved: true  →  runs in a fresh browser context
+```
+
+Splitting these is the gate: `/plan` has no side effects at all, so the model's output
+stays inert until a person has read it and posted it back.
+
+### Action plan schema
+
+A plan is a `goal` plus up to 12 actions, each discriminated by `type`:
 
 ```json
 {
-  "action": "click",
-  "target": "Submit Button",
-  "coordinates": { "x": 0.45, "y": 0.72 },
-  "explanation": "Clicking the submit button to post the form."
+  "goal": "Search the docs for the rate-limit settings",
+  "actions": [
+    { "type": "navigate", "url": "https://example.com/docs",
+      "reason": "The docs search lives here." },
+    { "type": "click", "x": 0.45, "y": 0.72,
+      "reason": "Focus the search box." },
+    { "type": "type", "text": "rate limit", "selector": "#search",
+      "reason": "Enter the query." },
+    { "type": "press", "key": "Enter", "reason": "Submit the search." }
+  ]
 }
 ```
 
-Coordinates are **normalized** floats in `[0,1]`; the coordinate mapper multiplies by the
-captured surface's real pixel dimensions before dispatch. High-risk actions require explicit
-user confirmation via the action approval queue.
+The seven action types are `navigate`, `click`, `type`, `press`, `scroll`, `wait`, and
+`screenshot`. The last three are `LOW` risk (observational); the rest are `HIGH` (they
+change state) and are never pre-checked in the approval UI.
+
+An **empty** `actions` list is valid and meaningful — the prompt tells the model to return
+one when the goal is already met or it cannot see what it needs. Rejecting empty would
+conflate a deliberate no-op with malformed output.
+
+### What bounds a plan
+
+The producer is a model reading a screenshot that may have been authored by someone
+hostile, so these are a security boundary, not input hygiene:
+
+| Bound | Why |
+|---|---|
+| URL schemes allowlisted to http/https | `javascript:` is script execution; `file:` and `data:` read local or attacker-supplied content; the rest are OS handlers that launch other applications. |
+| Keys allowlisted, not blocklisted | So a browser or OS shortcut can't be reached by omission. |
+| 12 actions per plan | A 40-step plan is unreviewable, which defeats the gate it has to pass. |
+| Re-validated at execute | Approval doesn't bypass the schema — an approved `javascript:` navigation is still rejected. |
+| Fresh browser context per plan | No cookies or storage carry between runs. |
+| Stops at first failure | Later actions were planned against a page state the failed one was meant to produce. |
+
+Actions run in a **Playwright browser this backend owns**. There is deliberately no
+OS-level input path — no desktop daemon, no synthetic global mouse or keyboard events. A
+model that has been prompt-injected by a hostile page can, at worst, drive the same browser
+that is already showing it that page.
+
+### Coordinates
+
+Click coordinates are **normalized** floats in `[0,1]`, never pixels; the mapper multiplies
+by the viewport's real pixel dimensions at execution time. The model sees a screenshot
+downscaled to a 1536px long edge, and normalized values are invariant to both that
+downscale and device pixel ratio — so the mapping stays correct without the model knowing
+either, and without a scale factor that can drift out of sync with capture settings.
