@@ -70,7 +70,8 @@ export default function Dashboard() {
           <div>
             <h1 className="text-base font-semibold">Workspace</h1>
             <p className="text-xs text-muted">
-              Test your model now — capture, voice, and automation land in upcoming milestones.
+              Chat, screen vision, voice, and approval-gated automation — all against your
+              own key.
             </p>
           </div>
         </header>

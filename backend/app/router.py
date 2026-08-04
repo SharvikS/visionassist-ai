@@ -14,6 +14,7 @@ from .providers import (
     AnthropicProvider,
     BaseProvider,
     GeminiProvider,
+    GroqProvider,
     OpenAIProvider,
     ProviderError,
 )
@@ -27,6 +28,7 @@ class ModelRouter:
             "anthropic": AnthropicProvider(timeout=t),
             "openai": OpenAIProvider(timeout=t),
             "gemini": GeminiProvider(timeout=t),
+            "groq": GroqProvider(timeout=t),
         }
 
     def _get(self, provider: str) -> BaseProvider:

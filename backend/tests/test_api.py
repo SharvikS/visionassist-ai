@@ -3,7 +3,12 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.providers import AnthropicProvider, GeminiProvider, OpenAIProvider
+from app.providers import (
+    AnthropicProvider,
+    GeminiProvider,
+    GroqProvider,
+    OpenAIProvider,
+)
 from app.schemas import Message
 
 client = TestClient(app)
@@ -19,7 +24,7 @@ def test_providers_catalog():
     r = client.get("/providers")
     assert r.status_code == 200
     ids = {p["id"] for p in r.json()}
-    assert ids == {"openai", "anthropic", "gemini"}
+    assert ids == {"openai", "anthropic", "gemini", "groq"}
 
 
 def test_chat_requires_key():
@@ -118,8 +123,26 @@ def test_anthropic_keeps_temperature_on_models_that_accept_it():
 
 def test_catalog_models_are_self_consistent():
     """Each provider's default model must appear in its own model list."""
-    for provider in (AnthropicProvider(), OpenAIProvider(), GeminiProvider()):
+    for provider in (
+        AnthropicProvider(),
+        OpenAIProvider(),
+        GeminiProvider(),
+        GroqProvider(),
+    ):
         assert provider.info.default_model in provider.info.models
+
+
+def test_groq_does_not_inherit_openais_identity():
+    """Groq subclasses the OpenAI adapter for the wire format only.
+
+    The two things that must *not* be inherited are the endpoint and the provider id.
+    Both were module-level in the OpenAI adapter before Groq existed, so a subclass
+    would silently have posted Groq traffic to api.openai.com and labelled its replies
+    "openai" — which would then be priced against the wrong table on the client.
+    """
+    assert GroqProvider.api_url != OpenAIProvider.api_url
+    assert "groq.com" in GroqProvider.api_url
+    assert GroqProvider.info.id == "groq"
 
 
 def test_gemini_maps_assistant_role_to_model():

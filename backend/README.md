@@ -135,7 +135,7 @@ audio back into a single blob.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest --cov        # 156 tests, 85% coverage
+pytest --cov        # 160 tests, 85% coverage
 ruff check . && mypy
 ```
 

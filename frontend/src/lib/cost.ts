@@ -26,9 +26,12 @@ export interface ModelRate {
  * Sonnet 5 is listed at its standard rate, not the promotional one, so the estimate
  * never *under*-reports what a bill will be.
  *
- * OpenAI and Google rates are approximate and are NOT verified here — confirm them
+ * OpenAI, Google, and Groq rates are approximate and are NOT verified here — confirm them
  * against the provider's pricing page before treating any of these figures as
  * authoritative. `PRICING_AS_OF` exists so a stale table is visible rather than silent.
+ *
+ * Groq's hosted open-weight catalog turns over faster than the others', so its entries go
+ * stale sooner in both directions: a model can be repriced or retired outright.
  */
 export const PRICING_AS_OF = "2026-08";
 
@@ -49,6 +52,14 @@ export const PRICING: Record<ProviderId, Record<string, ModelRate>> = {
     "gemini-2.0-flash-lite": { input: 0.075, output: 0.3 },
     "gemini-1.5-pro": { input: 1.25, output: 5.0 },
   },
+  groq: {
+    "meta-llama/llama-4-scout-17b-16e-instruct": { input: 0.11, output: 0.34 },
+    "meta-llama/llama-4-maverick-17b-128e-instruct": { input: 0.2, output: 0.6 },
+    "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
+    "llama-3.1-8b-instant": { input: 0.05, output: 0.08 },
+    "openai/gpt-oss-120b": { input: 0.15, output: 0.75 },
+    "openai/gpt-oss-20b": { input: 0.075, output: 0.3 },
+  },
 };
 
 /**
@@ -62,7 +73,7 @@ const CHARS_PER_TOKEN = 4;
  *
  * Vision billing is tile-based and differs per provider, but capture caps frames at a
  * 1536px long edge (see capture.ts), which lands in the same order of magnitude across
- * all three. A single constant keeps the estimate honest about its own precision.
+ * all of them. A single constant keeps the estimate honest about its own precision.
  */
 export const TOKENS_PER_FRAME = 1_500;
 

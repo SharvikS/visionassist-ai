@@ -1,7 +1,7 @@
 """Provider adapter request/response behaviour, exercised against a mock transport.
 
 These cover the streaming SSE parsers and the upstream error mapping — the paths that
-actually talk to Anthropic/OpenAI/Gemini in production, without any network access.
+actually talk to Anthropic/OpenAI/Gemini/Groq in production, without any network access.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from app import http_client
 from app.providers import (
     AnthropicProvider,
     GeminiProvider,
+    GroqProvider,
     OpenAIProvider,
     ProviderError,
 )
@@ -278,3 +279,68 @@ async def test_unknown_provider_is_rejected_by_the_router():
     with pytest.raises(ProviderError) as excinfo:
         await get_router().chat(req, api_key="k")
     assert excinfo.value.status_code == 400
+
+
+# -- Groq --------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_groq_posts_to_groq_and_streams_via_the_inherited_parser(mock_upstream):
+    """Groq reuses the OpenAI Chat Completions plumbing but must not reuse its endpoint."""
+    body = sse(
+        'data: {"choices":[{"delta":{"content":"Fast"}}]}',
+        "",
+        'data: {"choices":[{"delta":{"content":" tokens"}}]}',
+        "",
+        "data: [DONE]",
+        "",
+    )
+    seen = mock_upstream(lambda r: httpx.Response(200, content=body))
+
+    chunks = await collect(
+        GroqProvider().stream_chat(
+            api_key="gsk_test", model="llama-3.3-70b-versatile",
+            messages=[Message(role="user", text="hi")],
+            max_tokens=64, temperature=0.5,
+        )
+    )
+
+    assert chunks == ["Fast", " tokens"]
+    assert str(seen[0].url).startswith("https://api.groq.com/")
+    assert seen[0].headers["authorization"] == "Bearer gsk_test"
+
+
+@pytest.mark.anyio
+async def test_groq_labels_its_own_responses(mock_upstream):
+    """A reply tagged "openai" would be priced against the wrong table on the client."""
+    mock_upstream(lambda r: httpx.Response(200, json={
+        "choices": [{"message": {"content": "hi"}}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 1},
+    }))
+
+    resp = await GroqProvider().chat(
+        api_key="gsk_test", model="llama-3.1-8b-instant",
+        messages=[Message(role="user", text="hi")],
+        max_tokens=64, temperature=0.5,
+    )
+    assert resp.provider == "groq"
+
+
+@pytest.mark.anyio
+async def test_groq_sends_screen_frames_as_image_parts(mock_upstream):
+    """Vision is the app's main path, so the inherited image encoding must survive."""
+    seen = mock_upstream(lambda r: httpx.Response(200, json={
+        "choices": [{"message": {"content": "ok"}}], "usage": {},
+    }))
+
+    await GroqProvider().chat(
+        api_key="gsk_test", model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=[Message(role="user", text="what is this", images=["QUJD"])],
+        max_tokens=64, temperature=0.5,
+    )
+
+    import json as _json
+    content = _json.loads(seen[0].content)["messages"][0]["content"]
+    kinds = [part["type"] for part in content]
+    assert kinds == ["text", "image_url"]
+    assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")

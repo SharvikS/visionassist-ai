@@ -4,7 +4,7 @@
 
 VisionAssist turns any browser tab or screen into an interactive visual agent. Share your
 screen, talk to it, and get streamed answers about what's actually on it. Plug in your own
-OpenAI, Anthropic, or Google key — the app has no server-side keys and no database.
+OpenAI, Anthropic, Google, or Groq key — the app has no server-side keys and no database.
 
 Your keys are AES-256-GCM encrypted in the browser and sent only on active requests.
 
@@ -32,7 +32,7 @@ Your keys are AES-256-GCM encrypted in the browser and sent only on active reque
 | 🔐 **BYOK, no database** | Keys are encrypted client-side with the Web Crypto API and held server-side only for the life of a request or socket. Nothing is persisted. |
 | ⚡ **Real-time** | Token streaming over WebSockets, sentence-pipelined speech, and mid-sentence barge-in interruption. |
 | 💸 **Token-efficient** | Smart Frame Eviction drops visually-identical frames, and surviving frames are downscaled before encoding — you pay for change, not for pixels. |
-| 🤖 **Hot-swappable models** | One `ModelRouter` abstracts Claude, GPT, and Gemini behind a single streaming interface. Switch at runtime. |
+| 🤖 **Hot-swappable models** | One `ModelRouter` abstracts Claude, GPT, Gemini, and Groq behind a single streaming interface. Switch at runtime. |
 | 🧱 **Boring to operate** | Two processes, no queue, no broker, no state store. |
 
 ---
@@ -49,7 +49,7 @@ All five milestones are complete and working end to end.
 | ✅ | **M4** — On-screen automation | Action schema, coordinate mapper, Playwright runner, approval queue |
 | ✅ | **M5** — Polish, rate limiting & deploy | Cost overlay, rate limiting, strict CSP, Docker, CI |
 
-**Quality gates.** 156 backend tests (85% coverage) and 111 frontend tests, with ruff,
+**Quality gates.** 160 backend tests (85% coverage) and 120 frontend tests, with ruff,
 strict mypy, eslint, and `tsc --noEmit` all clean. CI runs the lot on every push, plus a
 Docker build that curls `/health` against a running container. Neither test suite touches
 the network.
@@ -122,7 +122,7 @@ a URL the browser can reach, not the compose service name.
         ┌───────────────────────────────▼──────────────────────────────────┐
         │  FastAPI orchestrator (Python + asyncio)                          │
         │   • Per-connection session state (key in memory only)             │
-        │   • ModelRouter → Anthropic / OpenAI / Gemini adapters            │
+        │   • ModelRouter → Anthropic / OpenAI / Gemini / Groq adapters     │
         │   • Pooled upstream HTTP client (shared, keep-alive)              │
         │   • Voice pipeline: Whisper STT + OpenAI TTS                      │
         └──────────────────────────────────────────────────────────────────┘
@@ -249,6 +249,19 @@ Catalogs live in `backend/app/providers/*.py` and are mirrored in
 | Anthropic | `claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5` | `claude-sonnet-5` |
 | OpenAI | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4o`, `gpt-4o-mini` | `gpt-4.1` |
 | Google | `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-pro` | `gemini-2.0-flash` |
+| Groq | `llama-4-scout`, `llama-4-maverick`, `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gpt-oss-120b`, `gpt-oss-20b` | `llama-4-scout` |
+
+**Groq** speaks the OpenAI Chat Completions format, so its adapter subclasses the OpenAI
+one and overrides only the base URL and catalog — the payload shaping and SSE parsing are
+inherited rather than duplicated. Two things to know:
+
+- **Vision is per model, not per provider.** The Llama 4 models accept images; the Llama
+  3.x and GPT-OSS ones are text-only and will reject a request carrying a screen frame.
+  That is why the default is a vision-capable model — screen capture is the main path.
+- **The catalog moves fast.** Groq adds and retires hosted open-weight models frequently.
+  `GET https://api.groq.com/openai/v1/models` with your key returns the live list; treat
+  the entries above (and their prices in `frontend/src/lib/cost.ts`) as a starting point
+  to verify, not as authoritative.
 
 Two Anthropic-specific details the adapter handles for you: Claude 5-series models reject
 `temperature`/`top_p`/`top_k` outright, so those are omitted for them; and the adapter sends
@@ -301,8 +314,8 @@ balancer, or move the buckets to Redis, if that matters to you.
 make test          # everything CI runs: lint, types, both suites, build
 
 # or individually
-cd backend  && pytest --cov          # 156 tests, 85% coverage
-cd frontend && npm test              # 111 tests
+cd backend  && pytest --cov          # 160 tests, 85% coverage
+cd frontend && npm test              # 120 tests
 cd frontend && npm run typecheck     # tsc --noEmit
 ```
 

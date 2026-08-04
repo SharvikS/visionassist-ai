@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import * as vault from "@/lib/vault";
-import { ProviderId, PROVIDERS } from "@/lib/providers";
+import { providerAfterKeySaved, ProviderId, PROVIDERS } from "@/lib/providers";
 
 export type VaultState = "loading" | "uninitialized" | "locked" | "unlocked";
 
@@ -87,8 +87,17 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     async (provider: ProviderId, apiKey: string) => {
       await vault.setKey(provider, apiKey);
       refresh();
+
+      // Follow the key just added when the current selection has none of its own.
+      // See providerAfterKeySaved for why.
+      const next = providerAfterKeySaved(
+        activeProvider,
+        vault.configuredProviders(),
+        provider,
+      );
+      if (next !== activeProvider) selectProvider(next);
     },
-    [refresh],
+    [refresh, activeProvider, selectProvider],
   );
 
   const removeKey = useCallback(

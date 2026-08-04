@@ -1,18 +1,24 @@
-"""OpenAI (GPT) provider adapter — Chat Completions API."""
+"""OpenAI (GPT) provider adapter — Chat Completions API.
+
+The Chat Completions wire format is also spoken by several other vendors, so `api_url` and
+`info` are class attributes rather than module constants: a compatible provider subclasses
+this and overrides the two, instead of copying the payload-shaping and SSE-parsing code.
+See `groq_provider.py`.
+"""
 
 from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, ClassVar
 
 from ..schemas import ChatResponse, Message, ProviderInfo
 from .base import BaseProvider
 
-_API_URL = "https://api.openai.com/v1/chat/completions"
-
 
 class OpenAIProvider(BaseProvider):
+    api_url: ClassVar[str] = "https://api.openai.com/v1/chat/completions"
+
     info = ProviderInfo(
         id="openai",
         label="OpenAI (GPT)",
@@ -54,13 +60,13 @@ class OpenAIProvider(BaseProvider):
     ) -> ChatResponse:
         payload = self._build_payload(model, messages, max_tokens, temperature)
         client = self._client()
-        resp = await client.post(_API_URL, headers=self._headers(api_key), json=payload)
+        resp = await client.post(self.api_url, headers=self._headers(api_key), json=payload)
         self._raise_for_upstream(resp)
         data = resp.json()
         text = data["choices"][0]["message"]["content"] or ""
         usage = data.get("usage", {})
         return ChatResponse(
-            provider="openai", model=model, text=text,
+            provider=self.info.id, model=model, text=text,
             input_tokens=usage.get("prompt_tokens"), output_tokens=usage.get("completion_tokens"),
         )
 
@@ -72,7 +78,7 @@ class OpenAIProvider(BaseProvider):
         payload["stream"] = True
         client = self._client()
         async with client.stream(
-            "POST", _API_URL, headers=self._headers(api_key), json=payload
+            "POST", self.api_url, headers=self._headers(api_key), json=payload
         ) as resp:
             if resp.status_code >= 400:
                 self._raise_for_status(resp.status_code, await resp.aread())

@@ -13,8 +13,10 @@ brokers streaming multimodal calls to the user's chosen LLM provider and drives 
    evicted before they ever cost a vision token.
 3. **Full-duplex, interruptible.** Voice in and voice out run concurrently. A client-side VAD
    trigger sends a `CANCEL` control frame that purges TTS buffers and halts server generation.
-4. **Provider-agnostic core.** A single `ModelRouter` abstracts OpenAI / Anthropic / Gemini
-   behind one streaming interface so models are hot-swappable at runtime.
+4. **Provider-agnostic core.** A single `ModelRouter` abstracts OpenAI / Anthropic /
+   Gemini / Groq behind one streaming interface so models are hot-swappable at runtime.
+   Providers that speak the OpenAI Chat Completions format subclass that adapter and
+   override only the base URL and catalog, so the wire handling stays in one place.
 
 ## Client (Next.js 16)
 

@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-Provider = Literal["openai", "anthropic", "gemini"]
+Provider = Literal["openai", "anthropic", "gemini", "groq"]
 Role = Literal["system", "user", "assistant"]
 
 # Guard rails — generous, but bound resource use and upstream cost.

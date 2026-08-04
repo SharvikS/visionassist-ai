@@ -20,7 +20,9 @@ The backend must be running (default `http://localhost:8000`) for the Model Test
   the unlocked session. See `src/lib/crypto.ts` and `src/lib/vault.ts`.
 - **Vault gate** — first-run creation + unlock screens (`src/components/VaultGate.tsx`).
 - **API Key modal** — add/replace/remove keys per provider (`src/components/ApiKeyModal.tsx`).
-- **Model switcher** — hot-swap Anthropic / OpenAI / Gemini and their models.
+- **Model switcher** — hot-swap Anthropic / OpenAI / Gemini / Groq and their models.
+  Providers without a stored key are labelled, and saving a key selects that provider when
+  the current one has none — otherwise the panels sit disabled with nothing explaining why.
 - **Model Test Console** — streams a live completion through the backend router to verify a
   provider + key end-to-end (`src/components/TestConsole.tsx`).
 
@@ -151,7 +153,7 @@ origin check, so it is unaffected.
 ## Tests
 
 ```bash
-npm test           # 111 tests (vitest)
+npm test           # 120 tests (vitest)
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint
 ```

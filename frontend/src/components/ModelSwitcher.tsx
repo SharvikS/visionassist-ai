@@ -27,10 +27,20 @@ export default function ModelSwitcher() {
           {PROVIDER_LIST.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
-              {configured.includes(p.id) ? " ✓" : ""}
+              {configured.includes(p.id) ? " ✓" : " — no key"}
             </option>
           ))}
         </select>
+        {!configured.includes(activeProvider) && (
+          // The panels all refuse to run without a key for the *selected* provider. Saying
+          // so here is the difference between "configured, but pointed elsewhere" and an
+          // app that looks silently broken.
+          <p className="mt-1.5 text-xs text-muted">
+            No key for {PROVIDERS[activeProvider].label}. Add one under{" "}
+            <span className="text-foreground">Manage API keys</span>, or pick a provider
+            marked ✓.
+          </p>
+        )}
       </div>
 
       <div>
