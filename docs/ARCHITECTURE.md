@@ -41,20 +41,37 @@ brokers streaming multimodal calls to the user's chosen LLM provider and drives 
 
 All control messages are JSON with a `type` discriminator.
 
-**Implemented today:**
-
 | `type` | Direction | Purpose |
 |--------|-----------|---------|
-| `init` | client → server | Provider, model, BYOK key, and system prompt for this session. |
+| `init` | client → server | Session setup: `provider`, `model`, `apiKey`, and optional `system`. |
 | `frame` | client → server | A visual frame (base64 JPEG) that survived eviction. Only the most recent is retained. |
 | `prompt` | client → server | A user text/voice prompt cue. |
 | `cancel` | client → server | Interrupt: halt the in-flight generation. |
 | `ping` | client → server | Keep-alive; answered with `pong`. |
-| `status` | server → client | `connected`, `ready`, `generating`, `interrupted`, `cancelled`, `idle_timeout`, and a single `frame_received` ack per session. |
+| `status` | server → client | Session state; see below. |
 | `token` | server → client | Streaming text token from the LLM. |
 | `done` | server → client | Generation finished normally. |
 | `error` | server → client | Validation or upstream failure; the session stays open. |
 | `pong` | server → client | Reply to `ping`. |
+
+Note that `init` takes **`apiKey`** in camelCase. The socket contract is camelCase because
+it is written and read by the browser client; the HTTP API is snake_case. An `init`
+carrying `api_key` is not an error — it leaves the session unconfigured, and the `status`
+reply says so.
+
+### `status` states
+
+| State | Meaning |
+|---|---|
+| `connected` | Socket accepted. Sent before any `init`. |
+| `ready` | `init` supplied provider, model, and key. The session can generate. |
+| `unconfigured` | `init` was received but one of those three was missing or empty. |
+| `error` | `init` named a provider the router doesn't know; an `error` message precedes it. |
+| `generating` | A generation is in flight. |
+| `interrupted` | A new prompt arrived and cancelled the previous generation (barge-in). |
+| `cancelled` | An explicit `cancel` stopped the generation. |
+| `frame_received` | Sent **once per session**, not per frame — at 10 FPS, per-frame acks were 10 wasted round trips a second. |
+| `idle_timeout` | The session was silent for `VA_WS_IDLE_TIMEOUT` and is closing, freeing the in-memory key. |
 
 Audio does not cross this socket. STT and TTS use the `/voice/*` HTTP endpoints, which keeps
 the control plane small and lets speech synthesis be pipelined per sentence on the client.
